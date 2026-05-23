@@ -1,0 +1,37 @@
+# local tooling
+.claude/
+
+# dependencies
+node_modules/
+frontend/node_modules/
+backend/node_modules/
+
+# build output
+dist/
+frontend/dist/
+backend/dist/
+coverage/
+
+# environment files
+.env
+.env.*
+!.env.example
+frontend/.env
+frontend/.env.*
+!frontend/.env.example
+backend/.env
+backend/.env.*
+!backend/.env.example
+
+# logs
+*.log
+
+# OS / editor files
+.DS_Store
+*.swp
+*.swo
+.vscode/
+.idea/
+
+# generated docs
+relazione-progetto.pdf
