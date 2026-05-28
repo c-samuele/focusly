@@ -1,6 +1,7 @@
 // Modello del task.
 // Uniforma i dati letti da storage e fornisce i default usati da tutta l'app.
 const PRIORITIES = ['low', 'medium', 'high'];
+const TASK_TITLE_MAX_LENGTH = 72;
 
 const getTodayDate = () => {
   const now = new Date();
@@ -12,7 +13,7 @@ const getTodayDate = () => {
 
 const createTask = (data = {}) => ({
   id: data.id ?? '',
-  title: data.title ?? '',
+  title: String(data.title ?? '').slice(0, TASK_TITLE_MAX_LENGTH),
   desc: data.desc ?? '',
   note: data.note ?? '',
   timer: Number.isFinite(Number(data.timer)) ? Number(data.timer) : 0,
@@ -24,4 +25,4 @@ const createTask = (data = {}) => ({
   completedAt: data.completed ? data.completedAt ?? data.createdAt ?? new Date().toISOString() : null,
 });
 
-export { PRIORITIES, createTask, getTodayDate };
+export { PRIORITIES, TASK_TITLE_MAX_LENGTH, createTask, getTodayDate };

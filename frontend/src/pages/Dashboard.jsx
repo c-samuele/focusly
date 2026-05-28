@@ -12,7 +12,6 @@ import { useFullscreen } from '../hooks/useFullscreen';
 import { useGroups } from '../hooks/useGroups';
 import { useTaskTimer } from '../hooks/useTaskTimer';
 import { useTasks } from '../hooks/useTasks';
-import { getTodayDate } from '../model/Task';
 import { useAppStore } from '../state/store';
 import { analyticsService } from '../services/analyticsService';
 
@@ -48,10 +47,17 @@ function Dashboard() {
   const { groups, selectedGroupId, createGroup, updateGroup, deleteGroup, selectGroup } = useGroups();
   const { tasks, allTasks, createTask, updateTask, deleteTask, toggleTaskComplete } = useTasks();
   const [editingTask, setEditingTask] = useState(null);
-  const [statsPeriod, setStatsPeriod] = useState('week');
   const [theme, setTheme] = useState(getInitialTheme);
   const { isFullscreen, toggleFullscreen } = useFullscreen();
-  const { sidebarOpen, toggleSidebar, setSidebarOpen, activeTab, setActiveTab } = useAppStore();
+  const {
+    sidebarOpen,
+    toggleSidebar,
+    setSidebarOpen,
+    activeTab,
+    setActiveTab,
+    statsPeriod,
+    setStatsPeriod,
+  } = useAppStore();
   const {
     activeTask,
     activeTaskId,
@@ -83,15 +89,27 @@ function Dashboard() {
   const selectedGroup = groups.find((group) => group.id === selectedGroupId) ?? null;
   const pendingTasks = tasks.filter((task) => !task.completed);
   
-  const todaysTasks = useMemo(
-    () =>
-      allTasks
-        .filter((task) => !task.completed && task.scheduledDate === getTodayDate())
+  const periodTasks = useMemo(
+    () => {
+      const periodBounds = analyticsService.getCurrentPeriodBounds(statsPeriod);
+
+      return allTasks
+        .filter((task) => (
+          !task.completed &&
+          task.scheduledDate &&
+          analyticsService.isWithinBounds(task.scheduledDate, periodBounds)
+        ))
         .map((task) => ({
           ...task,
           groupName: groups.find((group) => group.id === task.groupId)?.name ?? 'No Group',
+          groupColor: groups.find((group) => group.id === task.groupId)?.color,
         }))
         .sort((left, right) => {
+          const dateDiff = left.scheduledDate.localeCompare(right.scheduledDate);
+          if (dateDiff !== 0) {
+            return dateDiff;
+          }
+
           const priorityDiff = PRIORITY_ORDER[right.priority] - PRIORITY_ORDER[left.priority];
           if (priorityDiff !== 0) {
             return priorityDiff;
@@ -103,8 +121,9 @@ function Dashboard() {
           }
 
           return left.title.localeCompare(right.title);
-        }),
-    [allTasks, groups]
+        });
+    },
+    [allTasks, groups, statsPeriod]
   );
 
   const studyStats = useMemo(
@@ -207,14 +226,21 @@ function Dashboard() {
         />
       }
       mainContent={
-        <MainContent>
+        <MainContent
+          className={
+            activeTab === 'analytics'
+              ? 'main-content--analytics'
+              : 'main-content--tasks'
+          }
+        >
           {activeTab === 'analytics' ? (
             <AnalyticsZone
               stats={studyStats}
               period={statsPeriod}
               onPeriodChange={setStatsPeriod}
               historyStats={historyStats}
-              todaysTasks={todaysTasks}
+              periodTasks={periodTasks}
+              theme={theme}
             />
           ) : (
             <TaskList

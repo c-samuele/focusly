@@ -13,16 +13,16 @@ function MilestonesList({ milestones = [], onRemove, onToggleComplete }) {
   return (
     <div className="group-modal__milestones-list">
       {milestones.map((milestone, index) => (
-        <div key={milestone.id} className="group-modal__milestone-item">
+        <div key={`${milestone.id ?? 'milestone'}-${index}`} className="group-modal__milestone-item">
           <input
             type="checkbox"
-            id={`milestone-${milestone.id}`}
+            id={`milestone-${milestone.id ?? index}`}
             checked={milestone.completed || false}
             onChange={() => onToggleComplete(index)}
             aria-label={`Mark "${milestone.description}" as ${milestone.completed ? 'incomplete' : 'complete'}`}
           />
           <label
-            htmlFor={`milestone-${milestone.id}`}
+            htmlFor={`milestone-${milestone.id ?? index}`}
             className={`group-modal__milestone-text ${milestone.completed ? 'completed' : ''}`}
           >
             {milestone.description}

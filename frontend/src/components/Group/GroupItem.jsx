@@ -1,6 +1,11 @@
 // Riga singola del pannello gruppi.
 // Mostra nome, stato derivato e numero di task associati.
 import Button from '../UI/Button';
+import {
+  GROUP_TYPE_LABELS,
+  getGroupAccentStyle,
+  normalizeGroupType,
+} from '../../utils/groupAppearance';
 
 const STATUS_LABELS = {
   inactive: 'Inactive',
@@ -18,12 +23,18 @@ function GroupItem({ group, isSelected, onSelect, onDelete, onEdit, onViewMilest
   const statusLabel = STATUS_LABELS[group.status] ?? group.status.replace(/_/g, ' ');
   const milestoneValue = totalMilestones > 0 ? `${completedMilestones}/${totalMilestones}` : '0/0';
   const handleSelect = () => onSelect(group.id);
+  const accentStyle = getGroupAccentStyle(group.color);
+  const groupType = normalizeGroupType(group.type);
+  const groupTypeLabel = GROUP_TYPE_LABELS[groupType] ?? groupType;
 
   return (
     <article className={`group-item ${isSelected ? 'group-item--selected' : ''}`}>
       <button type="button" className="group-item__content" onClick={handleSelect}>
         <div className="group-item__eyebrow">
-          <span className="group-item__eyebrow-label">Study</span>
+          <span className="group-item__eyebrow-label" style={accentStyle}>
+            <span className="group-item__eyebrow-dot" aria-hidden="true" />
+            {groupTypeLabel}
+          </span>
           <span className={`status-pill status-pill--${group.status}`}>{statusLabel}</span>
         </div>
         <span className="group-item__name">{group.name}</span>

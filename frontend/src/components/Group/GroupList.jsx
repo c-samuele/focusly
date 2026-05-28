@@ -1,6 +1,7 @@
 // Colonna laterale dei gruppi di studio.
 // Qui si crea, seleziona ed elimina un gruppo.
 import { useState } from 'react';
+import { createPortal } from 'react-dom';
 import Button from '../UI/Button';
 import CreateGroupModal from './CreateGroupModal';
 import GroupItem from './GroupItem';
@@ -77,6 +78,7 @@ function GroupList({
   const completedMilestonesCount = viewingMilestonesGroup?.milestones.filter((m) => m.completed).length ?? 0;
   const totalMilestones = viewingMilestonesGroup?.milestones.length ?? 0;
   const progressPercent = totalMilestones ? Math.round((completedMilestonesCount / totalMilestones) * 100) : 0;
+  const modalRoot = typeof document !== 'undefined' ? document.body : null;
 
   const handleConfirmDelete = () => {
     if (!groupToDelete) {
@@ -135,7 +137,7 @@ function GroupList({
       />
 
       {/* Delete Group Modal */}
-      {groupToDelete ? (
+      {groupToDelete && modalRoot ? createPortal((
         <>
           <div className="modal fade show d-block group-modal" tabIndex="-1" role="dialog" aria-modal="true">
             <div className="modal-dialog modal-dialog-centered">
@@ -168,29 +170,25 @@ function GroupList({
               </div>
             </div>
           </div>
-          <div className="modal-backdrop fade show" onClick={handleCancelDelete} />
+          <div className="modal-backdrop fade show group-modal__backdrop" onClick={handleCancelDelete} />
         </>
-      ) : null}
+      ), modalRoot) : null}
 
       {/* View Milestones Modal */}
-      {viewingMilestonesGroup ? (
+      {viewingMilestonesGroup && modalRoot ? createPortal((
         <>
-          <div className="modal fade show d-block group-modal" tabIndex="-1" role="dialog" aria-modal="true">
-            <div className="modal-dialog modal-dialog-centered">
+          <div className="modal fade show d-block group-modal group-modal--milestones" tabIndex="-1" role="dialog" aria-modal="true">
+            <div className="modal-dialog modal-dialog-centered modal-dialog-scrollable group-modal__dialog group-modal__dialog--milestones">
               <div className="modal-content">
                 <div className="modal-header">
-                  <div>
-                    <h3 className="modal-title">Milestones for {viewingMilestonesGroup.name}</h3>
-                    <p className="group-modal__subtitle">
-                      Track progress and complete the most important study goals first.
-                    </p>
+                  <div className="group-modal__header-wrapper">
+                    <div className="group-modal__header-icon">
+                      <i className="bi bi-list-check" aria-hidden="true" />
+                    </div>
+                    <div>
+                      <h3 className="modal-title">Milestones for {viewingMilestonesGroup.name}</h3>
+                    </div>
                   </div>
-                  <button
-                    type="button"
-                    className="btn-close"
-                    aria-label="Close"
-                    onClick={handleCloseMilestones}
-                  />
                 </div>
                 <div className="modal-body group-modal__body milestones-modal__body">
                   <div className="milestones-summary">
@@ -207,34 +205,31 @@ function GroupList({
                       <strong>{totalMilestones - completedMilestonesCount}</strong>
                     </div>
                   </div>
-                  <div className="milestones-progress">
-                    <div className="milestones-progress__label">
-                      <span>Completion</span>
-                      <strong>{progressPercent}%</strong>
+
+                  <section className="milestones-modal__list-shell">
+                    <div className="milestones-modal__list-header">
+                      <div>
+                        <h4>Single milestones</h4>
+                      </div>
                     </div>
-                    <div className="milestones-progress__track">
-                      <div
-                        className="milestones-progress__bar"
-                        style={{ width: `${progressPercent}%` }}
-                      />
-                    </div>
-                  </div>
-                  {viewingMilestonesGroup.milestones.length === 0 ? (
-                    <p className="empty-state">No milestones defined.</p>
-                  ) : (
-                    <div className="milestones-list">
-                      {viewingMilestonesGroup.milestones.map((milestone, index) => (
-                        <MilestoneItem
-                          key={index}
-                          milestone={milestone}
-                          index={index}
-                          onToggle={handleToggleMilestone}
-                        />
-                      ))}
-                    </div>
-                  )}
+
+                    {viewingMilestonesGroup.milestones.length === 0 ? (
+                      <p className="empty-state">No milestones defined.</p>
+                    ) : (
+                      <div className="milestones-list">
+                        {viewingMilestonesGroup.milestones.map((milestone, index) => (
+                          <MilestoneItem
+                            key={milestone.id ?? index}
+                            milestone={milestone}
+                            index={index}
+                            onToggle={handleToggleMilestone}
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </section>
                 </div>
-                <div className="modal-footer">
+                <div className="modal-footer group-modal__footer">
                   <Button type="button" variant="ghost" onClick={handleCloseMilestones}>
                     Close
                   </Button>
@@ -242,9 +237,9 @@ function GroupList({
               </div>
             </div>
           </div>
-          <div className="modal-backdrop fade show" onClick={handleCloseMilestones} />
+          <div className="modal-backdrop fade show group-modal__backdrop" onClick={handleCloseMilestones} />
         </>
-      ) : null}
+      ), modalRoot) : null}
     </aside>
   );
 }

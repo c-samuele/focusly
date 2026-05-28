@@ -2,6 +2,7 @@
 // Coordina card riepilogative, selezione periodo e il grafico appropriato.
 import Button from '../UI/Button';
 import { formatMinutes } from '../../utils/timeFormat';
+import { getGroupAccentStyle } from '../../utils/groupAppearance';
 import StudyDayPieChart from './StudyDayPieChart';
 import StudyHistoryChart from './StudyHistoryChart';
 
@@ -12,12 +13,31 @@ const PERIOD_LABELS = {
   year: 'Year',
 };
 
+const formatScheduledLabel = (value, period) => {
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  if (period === 'year') {
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  }
+
+  if (period === 'month' || period === 'week') {
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  }
+
+  return date.toLocaleDateString('en-US', { weekday: 'short', day: 'numeric' });
+};
+
 function StudyChart({
   stats,
   period,
   onPeriodChange,
   historyStats,
-  todaysTasks,
+  periodTasks,
+  theme,
   showBreakdown = true,
 }) {
   const isDayView = period === 'day';
@@ -25,21 +45,12 @@ function StudyChart({
   return (
     <section className="analytics panel">
       <div className="analytics__header">
-        <div>
-          <p className="hero__eyebrow">Study Analytics</p>
-          <h2>{isDayView ? 'Today by Group' : 'Total Hours by Group'}</h2>
-          <p>
-            {isDayView
-              ? 'The pie chart shows how today study time is split across your groups.'
-              : 'Only completed task time is counted in the totals.'}
-          </p>
-        </div>
-
         <div className="analytics__filters">
           {Object.entries(PERIOD_LABELS).map(([value, label]) => (
             <Button
               key={value}
               variant={period === value ? 'primary' : 'ghost'}
+              className="analytics__filter-button"
               onClick={() => onPeriodChange(value)}
             >
               {label}
@@ -51,25 +62,41 @@ function StudyChart({
       <div className={`analytics__summary ${showBreakdown ? 'analytics__summary--split' : 'analytics__summary--single'}`}>
         <div className="analytics-card analytics-card--today">
           <div className="analytics-card__today-header">
-            <span>Today</span>
-            <strong className="analytics-card__today-count">{todaysTasks.length}</strong>
+            <div>
+              <span>{stats.periodLabel}</span>
+              <p className="analytics-card__meta">{period === 'day' ? 'Open tasks scheduled for today.' : 'Open tasks still planned in this period.'}</p>
+            </div>
+            <strong className="analytics-card__today-count">{periodTasks.length}</strong>
           </div>
-          {todaysTasks.length === 0 ? (
-            <p className="analytics-card__meta">No open tasks scheduled for today.</p>
+          {periodTasks.length === 0 ? (
+            <p className="analytics-card__meta">No open tasks scheduled in this period.</p>
           ) : (
             <div className="analytics-today-list">
-              {todaysTasks.map((task) => (
-                <article key={task.id} className="analytics-today-item">
-                  <span className="analytics-today-item__group">{task.groupName}</span>
-                  <strong>{task.title}</strong>
-                  <span className={`priority-badge priority-badge--${task.priority}`}>{task.priority}</span>
-                  <small className="analytics-today-item__timer"><i className="bi bi-clock" aria-hidden="true" /> {task.timer} min</small>
+              {periodTasks.map((task) => (
+                <article
+                  key={task.id}
+                  className="analytics-today-item"
+                  style={getGroupAccentStyle(task.groupColor)}
+                >
+                  <div className="analytics-today-item__topline">
+                    <span className="analytics-today-item__group">{task.groupName}</span>
+                    <span className="analytics-today-item__date">{formatScheduledLabel(task.scheduledDate, period)}</span>
+                  </div>
+                  <p className="analytics-today-item__title">{task.title}</p>
+                  <div className="analytics-today-item__footer">
+                    <span className={`priority-badge priority-badge--${task.priority}`}>{task.priority}</span>
+                    <small className="analytics-today-item__timer"><i className="bi bi-clock" aria-hidden="true" /> {task.timer} min</small>
+                  </div>
                 </article>
               ))}
             </div>
           )}
         </div>
-        {showBreakdown ? (isDayView ? <StudyDayPieChart stats={stats} /> : <StudyHistoryChart stats={historyStats} />) : null}
+        {showBreakdown ? (
+          isDayView
+            ? <StudyDayPieChart stats={stats} theme={theme} />
+            : <StudyHistoryChart stats={historyStats} theme={theme} />
+        ) : null}
       </div>
 
       <div className="analytics__totals">
@@ -84,6 +111,16 @@ function StudyChart({
             />
           </div>
           <p className="analytics-card__meta">{stats.completionRate}% of planned hours completed</p>
+        </div>
+        <div className="analytics-card analytics-card--metric">
+          <span>Completed tasks</span>
+          <strong>{stats.totalCompletedTasks}</strong>
+          <p className="analytics-card__meta">Finished in {stats.periodLabel.toLowerCase()}.</p>
+        </div>
+        <div className="analytics-card analytics-card--metric">
+          <span>Open tasks</span>
+          <strong>{stats.totalPendingTasks}</strong>
+          <p className="analytics-card__meta">{stats.totalTasks} total tasks in this period.</p>
         </div>
       </div>
     </section>

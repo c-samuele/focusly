@@ -1,10 +1,20 @@
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import Button from '../UI/Button';
+import GroupAppearanceField from './GroupAppearanceField';
 import GroupNameField from './GroupNameField';
 import MilestonesField from './MilestonesField';
+import {
+  DEFAULT_GROUP_TYPE,
+  getDefaultGroupColor,
+  normalizeGroupColor,
+  normalizeGroupType,
+} from '../../utils/groupAppearance';
 
 function CreateGroupModal({ isOpen, editingGroup, onSubmit, onCancel, isLoading = false }) {
   const [name, setName] = useState('');
+  const [groupType, setGroupType] = useState(DEFAULT_GROUP_TYPE);
+  const [groupColor, setGroupColor] = useState(getDefaultGroupColor('new-group'));
   const [milestones, setMilestones] = useState([]);
   const [newMilestoneText, setNewMilestoneText] = useState('');
   const [bulkMilestonesText, setBulkMilestonesText] = useState('');
@@ -19,9 +29,13 @@ function CreateGroupModal({ isOpen, editingGroup, onSubmit, onCancel, isLoading 
     if (isOpen) {
       if (editingGroup) {
         setName(editingGroup.name);
+        setGroupType(normalizeGroupType(editingGroup.type));
+        setGroupColor(normalizeGroupColor(editingGroup.color, `${editingGroup.id}|${editingGroup.name}`));
         setMilestones(editingGroup.milestones || []);
       } else {
         setName('');
+        setGroupType(DEFAULT_GROUP_TYPE);
+        setGroupColor(getDefaultGroupColor('new-group'));
         setMilestones([]);
       }
       setNewMilestoneText('');
@@ -108,10 +122,17 @@ function CreateGroupModal({ isOpen, editingGroup, onSubmit, onCancel, isLoading 
   // Check if form has unsaved changes
   const checkUnsavedChanges = () => {
     if (!editingGroup) {
-      return name.trim().length > 0 || milestones.length > 0;
+      return (
+        name.trim().length > 0 ||
+        groupType !== DEFAULT_GROUP_TYPE ||
+        groupColor !== getDefaultGroupColor('new-group') ||
+        milestones.length > 0
+      );
     }
     return (
       name !== editingGroup.name ||
+      groupType !== normalizeGroupType(editingGroup.type) ||
+      groupColor !== normalizeGroupColor(editingGroup.color, `${editingGroup.id}|${editingGroup.name}`) ||
       JSON.stringify(milestones) !== JSON.stringify(editingGroup.milestones || [])
     );
   };
@@ -188,9 +209,13 @@ function CreateGroupModal({ isOpen, editingGroup, onSubmit, onCancel, isLoading 
 
     onSubmit({
       name: name.trim(),
+      type: normalizeGroupType(groupType),
+      color: normalizeGroupColor(groupColor, name.trim()),
       milestones: finalMilestones,
     });
 
+    setGroupType(DEFAULT_GROUP_TYPE);
+    setGroupColor(getDefaultGroupColor('new-group'));
     setMilestones(finalMilestones);
     setBulkMilestonesText('');
 
@@ -225,20 +250,20 @@ function CreateGroupModal({ isOpen, editingGroup, onSubmit, onCancel, isLoading 
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, name, milestones, editingGroup]);
 
-  if (!isOpen) return null;
+  if (!isOpen || typeof document === 'undefined') return null;
 
-  return (
+  return createPortal((
     <>
       {/* Main Modal */}
       <div
-        className="modal fade show d-block group-modal"
+        className="modal fade show d-block group-modal group-modal--editor"
         ref={modalRef}
         tabIndex="-1"
         role="dialog"
         aria-modal="true"
         aria-labelledby="groupModalTitle"
       >
-        <div className="modal-dialog modal-dialog-centered">
+        <div className="modal-dialog modal-dialog-centered modal-dialog-scrollable group-modal__dialog group-modal__dialog--editor">
           <div className="modal-content">
             {/* Header */}
             <div className="modal-header">
@@ -253,44 +278,51 @@ function CreateGroupModal({ isOpen, editingGroup, onSubmit, onCancel, isLoading 
                   <p className="group-modal__subtitle">
                     {editingGroup
                       ? 'Update group details and milestones.'
-                      : 'Add a new study group with milestones.'}
+                      : 'Add a new group with milestones, color and type.'}
                   </p>
                 </div>
               </div>
-              <button
-                type="button"
-                className="btn-close"
-                aria-label="Close"
-                onClick={handleCancel}
-              />
             </div>
 
             {/* Form */}
             <form onSubmit={handleSubmit}>
               <div className="modal-body group-modal__body">
-                <GroupNameField
-                  value={name}
-                  onChange={handleNameChange}
-                  error={errors.name}
-                  minLength={3}
-                  maxLength={50}
-                />
+                <section className="group-modal__panel">
+                  <div className="group-modal__section-heading">
+                    <h4>Group details</h4>
+                  </div>
+                  <GroupNameField
+                    value={name}
+                    onChange={handleNameChange}
+                    error={errors.name}
+                    minLength={3}
+                    maxLength={50}
+                  />
+                  <GroupAppearanceField
+                    type={groupType}
+                    color={groupColor}
+                    onTypeChange={setGroupType}
+                    onColorChange={(value) => setGroupColor(normalizeGroupColor(value, name.trim()))}
+                  />
+                </section>
 
-                <MilestonesField
-                  milestones={milestones}
-                  newMilestoneText={newMilestoneText}
-                  bulkMilestonesText={bulkMilestonesText}
-                  dropActive={dropActive}
-                  onNewMilestoneChange={setNewMilestoneText}
-                  onBulkMilestonesChange={setBulkMilestonesText}
-                  onAddMilestone={handleAddMilestone}
-                  onImportMilestones={handleImportMilestones}
-                  onRemoveMilestone={handleRemoveMilestone}
-                  onToggleComplete={handleToggleComplete}
-                  onFileUpload={handleFileUpload}
-                  setDropActive={setDropActive}
-                  error={errors.milestone}
-                />
+                <section className="group-modal__panel">
+                  <MilestonesField
+                    milestones={milestones}
+                    newMilestoneText={newMilestoneText}
+                    bulkMilestonesText={bulkMilestonesText}
+                    dropActive={dropActive}
+                    onNewMilestoneChange={setNewMilestoneText}
+                    onBulkMilestonesChange={setBulkMilestonesText}
+                    onAddMilestone={handleAddMilestone}
+                    onImportMilestones={handleImportMilestones}
+                    onRemoveMilestone={handleRemoveMilestone}
+                    onToggleComplete={handleToggleComplete}
+                    onFileUpload={handleFileUpload}
+                    setDropActive={setDropActive}
+                    error={errors.milestone}
+                  />
+                </section>
               </div>
 
               {/* Footer */}
@@ -322,7 +354,7 @@ function CreateGroupModal({ isOpen, editingGroup, onSubmit, onCancel, isLoading 
 
       {/* Backdrop */}
       <div
-        className="modal-backdrop fade show"
+        className="modal-backdrop fade show group-modal__backdrop"
         onClick={handleCancel}
         aria-hidden="true"
       />
@@ -373,14 +405,14 @@ function CreateGroupModal({ isOpen, editingGroup, onSubmit, onCancel, isLoading 
             </div>
           </div>
           <div
-            className="modal-backdrop fade show"
+            className="modal-backdrop fade show group-modal__backdrop"
             onClick={() => setShowUnsavedWarning(false)}
             aria-hidden="true"
           />
         </>
       )}
     </>
-  );
+  ), document.body);
 }
 
 export default CreateGroupModal;

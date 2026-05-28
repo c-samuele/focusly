@@ -5,6 +5,8 @@ import { groupService } from '../services/groupService';
 import { taskService } from '../services/taskService';
 
 const SIDEBAR_STORAGE_KEY = 'sidebar-open';
+const STATS_PERIOD_STORAGE_KEY = 'analytics-stats-period';
+const VALID_STATS_PERIODS = new Set(['day', 'week', 'month', 'year']);
 
 const getInitialSidebarState = () => {
   if (typeof window === 'undefined') {
@@ -12,6 +14,15 @@ const getInitialSidebarState = () => {
   }
   const stored = window.localStorage.getItem(SIDEBAR_STORAGE_KEY);
   return stored === null ? true : stored === 'true';
+};
+
+const getInitialStatsPeriod = () => {
+  if (typeof window === 'undefined') {
+    return 'week';
+  }
+
+  const stored = window.localStorage.getItem(STATS_PERIOD_STORAGE_KEY);
+  return VALID_STATS_PERIODS.has(stored) ? stored : 'week';
 };
 
 const getInitialState = () => {
@@ -24,6 +35,7 @@ const getInitialState = () => {
     groups,
     selectedGroupId: groups[0]?.id ?? '',
     sidebarOpen: getInitialSidebarState(),
+    statsPeriod: getInitialStatsPeriod(),
   };
 };
 
@@ -130,6 +142,20 @@ export const useAppStore = create((set) => ({
         window.localStorage.setItem(SIDEBAR_STORAGE_KEY, String(isOpen));
       }
       return { sidebarOpen: isOpen };
+    });
+  },
+
+  setStatsPeriod: (period) => {
+    if (!VALID_STATS_PERIODS.has(period)) {
+      return;
+    }
+
+    set(() => {
+      if (typeof window !== 'undefined') {
+        window.localStorage.setItem(STATS_PERIOD_STORAGE_KEY, period);
+      }
+
+      return { statsPeriod: period };
     });
   },
 }));

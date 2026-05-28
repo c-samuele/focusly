@@ -2,16 +2,21 @@
 import { useEffect, useMemo, useRef } from 'react';
 import Chart from 'chart.js/auto';
 import { formatMinutes, hoursToMinutes } from '../../utils/timeFormat';
+import { normalizeGroupColor } from '../../utils/groupAppearance';
 
-const CHART_COLORS = ['#2557a7', '#ef7d57', '#3aa889', '#7a5af8', '#f2b134', '#2f6fed', '#d95f8d'];
-
-function StudyDayPieChart({ stats }) {
+function StudyDayPieChart({ stats, theme = 'light' }) {
   const canvasRef = useRef(null);
   const chartRef = useRef(null);
   const activeGroups = useMemo(
-    () => stats.groupStats.filter((item) => item.studyHours > 0),
+    () => stats.groupStats
+      .filter((item) => item.studyHours > 0)
+      .map((item) => ({
+        ...item,
+        color: normalizeGroupColor(item.color, `${item.groupId}|${item.groupName}`),
+      })),
     [stats.groupStats]
   );
+  const segmentBorderColor = theme === 'dark' ? '#152235' : '#E8EEF7';
 
   useEffect(() => {
     if (!canvasRef.current || activeGroups.length === 0) {
@@ -29,8 +34,8 @@ function StudyDayPieChart({ stats }) {
         datasets: [
           {
             data: activeGroups.map((item) => item.studyHours),
-            backgroundColor: activeGroups.map((_, index) => CHART_COLORS[index % CHART_COLORS.length]),
-            borderColor: '#e8eef7',
+            backgroundColor: activeGroups.map((item) => item.color),
+            borderColor: segmentBorderColor,
             borderWidth: 1,
             hoverOffset: 30,
           },
@@ -59,17 +64,13 @@ function StudyDayPieChart({ stats }) {
     return () => {
       chartRef.current?.destroy();
     };
-  }, [activeGroups]);
+  }, [activeGroups, segmentBorderColor]);
 
   if (activeGroups.length === 0) {
     return (
       <div className="history-card day-breakdown-card">
-        <div className="history-card__header">
-          <div>
-            <span>Today by Group</span>
-            <strong>0 min</strong>
-            <p>No completed study time recorded yet for today.</p>
-          </div>
+        <div className="day-breakdown-card__empty">
+          <p>No completed study time recorded yet for today.</p>
         </div>
       </div>
     );
@@ -77,25 +78,17 @@ function StudyDayPieChart({ stats }) {
 
   return (
     <div className="history-card day-breakdown-card">
-      <div className="history-card__header">
-        <div>
-          <span>Today by Group</span>
-          <strong>{formatMinutes(stats.totalMinutes)}</strong>
-          <p>{stats.totalCompletedTasks} completed tasks</p>
-        </div>
-      </div>
-
       <div className="day-breakdown-card__body">
         <div className="day-breakdown-card__canvas">
           <canvas ref={canvasRef} />
         </div>
 
         <div className="day-breakdown-legend">
-          {activeGroups.map((item, index) => (
+          {activeGroups.map((item) => (
             <article key={item.groupId} className="day-breakdown-legend__item">
               <span
                 className="day-breakdown-legend__swatch"
-                style={{ backgroundColor: CHART_COLORS[index % CHART_COLORS.length] }}
+                style={{ backgroundColor: item.color }}
                 aria-hidden="true"
               />
               <div>

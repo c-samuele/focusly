@@ -1,8 +1,8 @@
 // Area principale scrollabile della dashboard.
 // Contiene Today Pillars, Focus Timer, Analytics e Tasks.
-function MainContent({ children }) {
+function MainContent({ children, className = '' }) {
   return (
-    <main className="main-content">
+    <main className={`main-content ${className}`.trim()}>
       {children}
     </main>
   );

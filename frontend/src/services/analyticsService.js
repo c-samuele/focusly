@@ -51,6 +51,22 @@ const getCurrentPeriodBounds = (period) => {
   return { start, end };
 };
 
+const getCurrentPeriodLabel = (period) => {
+  if (period === 'day') {
+    return 'Today';
+  }
+
+  if (period === 'week') {
+    return 'This Week';
+  }
+
+  if (period === 'month') {
+    return 'This Month';
+  }
+
+  return 'This Year';
+};
+
 const getHistoryPeriodBounds = (period) => {
   const bounds = getCurrentPeriodBounds(period);
 
@@ -95,6 +111,8 @@ const buildStudyStats = ({ tasks, groups, period }) => {
     return {
       groupId: group.id,
       groupName: group.name,
+      groupType: group.type,
+      color: group.color,
       completedTasks: groupTasks.length,
       studyMinutes: totalMinutes,
       studyHours: totalMinutes / 60,
@@ -104,16 +122,21 @@ const buildStudyStats = ({ tasks, groups, period }) => {
   const totalPlannedMinutes = plannedTasks.reduce((sum, task) => sum + (Number(task.timer) || 0), 0);
   const totalMinutes = groupStats.reduce((sum, item) => sum + item.studyMinutes, 0);
   const totalCompletedTasks = groupStats.reduce((sum, item) => sum + item.completedTasks, 0);
+  const totalTasks = plannedTasks.length;
+  const totalPendingTasks = plannedTasks.filter((task) => !task.completed).length;
   const completionRate =
     totalPlannedMinutes > 0 ? Math.min(100, Math.round((totalMinutes / totalPlannedMinutes) * 100)) : 0;
 
   return {
     period,
+    periodLabel: getCurrentPeriodLabel(period),
     totalPlannedMinutes,
     totalPlannedHours: totalPlannedMinutes / 60,
     totalMinutes,
     totalHours: totalMinutes / 60,
+    totalTasks,
     totalCompletedTasks,
+    totalPendingTasks,
     completionRate,
     groupStats,
   };
@@ -195,4 +218,6 @@ const buildHistoryStats = ({ tasks, period }) => {
 export const analyticsService = {
   buildStudyStats,
   buildHistoryStats,
+  getCurrentPeriodBounds,
+  isWithinBounds,
 };

@@ -5,7 +5,8 @@ function AnalyticsZone({
   period,
   onPeriodChange,
   historyStats,
-  todaysTasks,
+  periodTasks,
+  theme,
 }) {
   return (
     <section className="analytics-zone">
@@ -14,7 +15,8 @@ function AnalyticsZone({
         period={period}
         onPeriodChange={onPeriodChange}
         historyStats={historyStats}
-        todaysTasks={todaysTasks}
+        periodTasks={periodTasks}
+        theme={theme}
         showBreakdown
       />
     </section>

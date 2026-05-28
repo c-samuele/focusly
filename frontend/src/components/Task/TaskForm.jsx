@@ -1,7 +1,7 @@
 // Form usato sia per creare sia per modificare un task.
 // Riutilizza la stessa struttura variando i valori iniziali e le callback.
 import { useEffect, useState, useRef } from 'react';
-import { getTodayDate } from '../../model/Task';
+import { getTodayDate, TASK_TITLE_MAX_LENGTH } from '../../model/Task';
 import Button from '../UI/Button';
 import MilestoneDropdown from './MilestoneDropdown';
 
@@ -43,7 +43,7 @@ function TaskForm({ onSubmit, onCancel, initialValues, submitLabel, disabled, gr
   const handleSelectMilestone = (milestone) => {
     setFormData((current) => ({
       ...current,
-      title: milestone.description,
+      title: String(milestone.description ?? '').slice(0, TASK_TITLE_MAX_LENGTH),
     }));
     setShowMilestoneSelector(false);
   };
@@ -59,7 +59,7 @@ function TaskForm({ onSubmit, onCancel, initialValues, submitLabel, disabled, gr
 
     onSubmit({
       ...formData,
-      title,
+      title: title.slice(0, TASK_TITLE_MAX_LENGTH),
       desc: formData.desc.trim(),
       note: formData.note.trim(),
       timer: Number(formData.timer) || 0,
@@ -80,13 +80,17 @@ function TaskForm({ onSubmit, onCancel, initialValues, submitLabel, disabled, gr
       <div className="task-form__grid">
         <div className="task-form__title-row">
           <div className="task-form__title-section">
-            <span>Title</span>
+            <div className="task-form__title-label-row">
+              <span>Title</span>
+              <small>{formData.title.length}/{TASK_TITLE_MAX_LENGTH}</small>
+            </div>
             <div className="task-form__title-input-wrapper">
               <input
                 name="title"
                 value={formData.title}
                 onChange={handleChange}
                 placeholder="Task title"
+                maxLength={TASK_TITLE_MAX_LENGTH}
               />
               {incompleteMilestones.length > 0 && (
                 <button

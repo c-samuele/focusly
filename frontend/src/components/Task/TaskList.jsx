@@ -106,7 +106,8 @@ function TaskList({
     <section className="panel panel--tasks">
       <div className="panel__header">
         <div className="task-panel__header">
-          <div>
+          <div className="task-panel__header-copy">
+            <p className="task-panel__eyebrow">Task Flow</p>
             <h2>{hasSelectedGroup ? groupName : 'Tasks'}</h2>
             <p>
               {hasSelectedGroup
@@ -164,7 +165,10 @@ function TaskList({
           <div className="task-columns task-columns--balanced">
             <div className="task-column">
               <div className="task-column__header">
-                <h3>To Do</h3>
+                <div className="task-column__header-copy">
+                  <h3>To Do</h3>
+                  <p>Active study blocks waiting for attention.</p>
+                </div>
                 <div className="task-column__header-actions">
                   <div className="task-filter">
                     <Button
@@ -189,7 +193,7 @@ function TaskList({
                       All
                     </Button>
                   </div>
-                  <span>{filteredPendingTasks.length}</span>
+                  <span className="task-column__count">{filteredPendingTasks.length}</span>
                 </div>
               </div>
               <div className="task-column__body">
@@ -223,7 +227,10 @@ function TaskList({
 
             <div className="task-column">
               <div className="task-column__header">
-                <h3>Completed</h3>
+                <div className="task-column__header-copy">
+                  <h3>Completed</h3>
+                  <p>Finished blocks archived for quick review.</p>
+                </div>
                 <div className="task-column__header-actions">
                   <div className="task-filter">
                     <Button
@@ -248,7 +255,7 @@ function TaskList({
                       All
                     </Button>
                   </div>
-                  <span>{filteredCompletedTasks.length}</span>
+                  <span className="task-column__count">{filteredCompletedTasks.length}</span>
                 </div>
               </div>
               <div className="task-column__body">
