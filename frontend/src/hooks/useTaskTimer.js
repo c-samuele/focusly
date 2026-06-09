@@ -106,14 +106,15 @@ export const useTaskTimer = (tasks, onTimerComplete) => {
     }
   }, [activeTask]);
 
-  // Effect che gestisce il timer aggiornando displaySeconds per triggerizzare re-render
+  // Aggiorniamo il display al ritmo dei secondi mostrati a schermo
+  // per evitare re-render inutilmente frequenti dell'intera dashboard.
   useEffect(() => {
     if (!activeTaskId || !isRunning) {
       window.clearInterval(intervalRef.current);
       intervalRef.current = null;
 
       const remaining = calculateRemainingSeconds();
-      setDisplaySeconds(remaining);
+      setDisplaySeconds((current) => (current === remaining ? current : remaining));
       
       // Il suono viene emesso una sola volta per completamento.
       if (activeTaskId && remaining === 0 && completedSoundForRef.current !== activeTaskId) {
@@ -136,10 +137,10 @@ export const useTaskTimer = (tasks, onTimerComplete) => {
       return;
     }
 
-    // Aggiorniamo il display ogni 100ms per un aggiornamento fluido
+    // Il timer mostra solo mm:ss: un tick al secondo e` sufficiente.
     intervalRef.current = window.setInterval(() => {
       const remaining = calculateRemainingSeconds();
-      setDisplaySeconds(remaining);
+      setDisplaySeconds((current) => (current === remaining ? current : remaining));
       
       // Quando il timer arriva a zero, triggeriamo il completamento
       if (remaining <= 0) {
@@ -163,7 +164,7 @@ export const useTaskTimer = (tasks, onTimerComplete) => {
           setTotalDuration(0);
         }
       }
-    }, 100);
+    }, 1000);
 
     return () => {
       window.clearInterval(intervalRef.current);

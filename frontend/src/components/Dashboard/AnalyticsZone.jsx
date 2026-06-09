@@ -7,6 +7,10 @@ function AnalyticsZone({
   historyStats,
   periodTasks,
   theme,
+  activeTaskId,
+  isRunning,
+  onStartTimer,
+  onPauseTimer,
 }) {
   return (
     <section className="analytics-zone">
@@ -17,6 +21,10 @@ function AnalyticsZone({
         historyStats={historyStats}
         periodTasks={periodTasks}
         theme={theme}
+        activeTaskId={activeTaskId}
+        isRunning={isRunning}
+        onStartTimer={onStartTimer}
+        onPauseTimer={onPauseTimer}
         showBreakdown
       />
     </section>

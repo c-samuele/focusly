@@ -241,6 +241,10 @@ function Dashboard() {
               historyStats={historyStats}
               periodTasks={periodTasks}
               theme={theme}
+              activeTaskId={activeTaskId}
+              isRunning={isRunning}
+              onStartTimer={startTimer}
+              onPauseTimer={pauseTimer}
             />
           ) : (
             <TaskList

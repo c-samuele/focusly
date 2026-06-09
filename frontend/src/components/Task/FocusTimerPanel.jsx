@@ -192,93 +192,98 @@ function FocusTimerPanel({
     : undefined;
 
   const timerStatus = isRunning ? 'Running' : activeTask ? 'Paused' : 'Idle';
+  const showBackdrop = isRunning && isExpanded;
 
   return (
-    <aside
-      ref={panelRef}
-      className={[
-        'floating-focus-timer',
-        isExpanded ? 'floating-focus-timer--expanded' : 'floating-focus-timer--compact',
-        isDragging ? 'floating-focus-timer--dragging' : '',
-        isRunning ? 'floating-focus-timer--active' : '',
-      ].filter(Boolean).join(' ')}
-      style={floatingStyle}
-      onPointerDown={handlePointerDown}
-      onPointerMove={handlePointerMove}
-      onPointerUp={handlePointerUp}
-      onPointerCancel={stopDragging}
-    >
-      <div className="floating-focus-timer__surface">
-        <div className="floating-focus-timer__chrome">
-          <div className="floating-focus-timer__handle">
-            <span className="floating-focus-timer__status-dot" aria-hidden="true" />
-            <div className="floating-focus-timer__meta">
-              <span className="floating-focus-timer__eyebrow">Focus Timer</span>
-              <strong className="floating-focus-timer__status">{timerStatus}</strong>
+    <>
+      {showBackdrop ? <div className="floating-focus-timer__backdrop" aria-hidden="true" /> : null}
+
+      <aside
+        ref={panelRef}
+        className={[
+          'floating-focus-timer',
+          isExpanded ? 'floating-focus-timer--expanded' : 'floating-focus-timer--compact',
+          isDragging ? 'floating-focus-timer--dragging' : '',
+          isRunning ? 'floating-focus-timer--active' : '',
+        ].filter(Boolean).join(' ')}
+        style={floatingStyle}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onPointerCancel={stopDragging}
+      >
+        <div className="floating-focus-timer__surface">
+          <div className="floating-focus-timer__chrome">
+            <div className="floating-focus-timer__handle">
+              <span className="floating-focus-timer__status-dot" aria-hidden="true" />
+              <div className="floating-focus-timer__meta">
+                <span className="floating-focus-timer__eyebrow">Focus Timer</span>
+                <strong className="floating-focus-timer__status">{timerStatus}</strong>
+              </div>
             </div>
+
+            <button
+              type="button"
+              className="floating-focus-timer__toggle"
+              onClick={handleToggleExpanded}
+              aria-label={isExpanded ? 'Reduce focus timer' : 'Expand focus timer'}
+              title={isExpanded ? 'Reduce focus timer' : 'Expand focus timer'}
+              data-no-drag="true"
+            >
+              <i className={`bi ${isExpanded ? 'bi-dash-lg' : 'bi-plus-lg'}`} aria-hidden="true" />
+            </button>
           </div>
 
-          <button
-            type="button"
-            className="floating-focus-timer__toggle"
-            onClick={handleToggleExpanded}
-            aria-label={isExpanded ? 'Reduce focus timer' : 'Expand focus timer'}
-            title={isExpanded ? 'Reduce focus timer' : 'Expand focus timer'}
-            data-no-drag="true"
-          >
-            <i className={`bi ${isExpanded ? 'bi-dash-lg' : 'bi-plus-lg'}`} aria-hidden="true" />
-          </button>
+          {isExpanded ? (
+            <div className={`focus-timer-card ${activeTask ? '' : 'focus-timer-card--idle'}`.trim()}>
+              <div className="focus-timer-card__header">
+                <span className="focus-timer-card__label">{activeTask ? 'Current Session' : 'Ready to Focus'}</span>
+                {activeTask ? (
+                  <span className="focus-timer-card__planned">{activeTask.timer} min plan</span>
+                ) : null}
+              </div>
+
+              <h4 className="focus-timer-card__title">{activeTask?.title || 'Pick a task and start the timer'}</h4>
+
+              <p className="focus-timer-card__note">
+                {activeTask?.note || (activeTask ? 'Stay on this block until the timer rings.' : 'The timer follows the selected task and stays visible while you work.')}
+              </p>
+
+              <div className="focus-timer-card__time-row">
+                <div className="focus-timer-card__time">{activeTimerLabel}</div>
+              </div>
+
+              <div className="focus-timer-card__actions" data-no-drag="true">
+                <Button
+                  variant={isRunning ? 'ghost' : 'primary'}
+                  className="floating-focus-timer__action floating-focus-timer__action--primary"
+                  onClick={handlePrimaryAction}
+                  disabled={!activeTask}
+                >
+                  <i className={`bi ${isRunning ? 'bi-pause-fill' : 'bi-play-fill'}`} aria-hidden="true" />
+                  {isRunning ? 'Pause' : 'Start'}
+                </Button>
+
+                <Button
+                  variant="ghost"
+                  className="floating-focus-timer__action"
+                  onClick={() => activeTask && onResetTimer(activeTask)}
+                  disabled={!activeTask}
+                >
+                  <i className="bi bi-arrow-counterclockwise" aria-hidden="true" />
+                  Reset
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="floating-focus-timer__compact-content">
+              <span className="floating-focus-timer__compact-status">{timerStatus}</span>
+              <strong>{activeTimerLabel}</strong>
+            </div>
+          )}
         </div>
-
-        {isExpanded ? (
-          <div className={`focus-timer-card ${activeTask ? '' : 'focus-timer-card--idle'}`.trim()}>
-            <div className="focus-timer-card__header">
-              <span className="focus-timer-card__label">{activeTask ? 'Current Session' : 'Ready to Focus'}</span>
-              {activeTask ? (
-                <span className="focus-timer-card__planned">{activeTask.timer} min plan</span>
-              ) : null}
-            </div>
-
-            <h4 className="focus-timer-card__title">{activeTask?.title || 'Pick a task and start the timer'}</h4>
-
-            <p className="focus-timer-card__note">
-              {activeTask?.note || (activeTask ? 'Stay on this block until the timer rings.' : 'The timer follows the selected task and stays visible while you work.')}
-            </p>
-
-            <div className="focus-timer-card__time-row">
-              <div className="focus-timer-card__time">{activeTimerLabel}</div>
-            </div>
-
-            <div className="focus-timer-card__actions" data-no-drag="true">
-              <Button
-                variant={isRunning ? 'ghost' : 'primary'}
-                className="floating-focus-timer__action floating-focus-timer__action--primary"
-                onClick={handlePrimaryAction}
-                disabled={!activeTask}
-              >
-                <i className={`bi ${isRunning ? 'bi-pause-fill' : 'bi-play-fill'}`} aria-hidden="true" />
-                {isRunning ? 'Pause' : 'Start'}
-              </Button>
-
-              <Button
-                variant="ghost"
-                className="floating-focus-timer__action"
-                onClick={() => activeTask && onResetTimer(activeTask)}
-                disabled={!activeTask}
-              >
-                <i className="bi bi-arrow-counterclockwise" aria-hidden="true" />
-                Reset
-              </Button>
-            </div>
-          </div>
-        ) : (
-          <div className="floating-focus-timer__compact-content">
-            <span className="floating-focus-timer__compact-status">{timerStatus}</span>
-            <strong>{activeTimerLabel}</strong>
-          </div>
-        )}
-      </div>
-    </aside>
+      </aside>
+    </>
   );
 }
 
