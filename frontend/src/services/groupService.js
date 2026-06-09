@@ -2,7 +2,7 @@
 // Si occupa di CRUD base e del calcolo dello stato visuale del gruppo.
 import { createGroup } from '../model/Group';
 import { getTodayDate } from '../model/Task';
-import { storageService } from './storageService';
+import { firestoreService } from './firestoreService';
 
 const createId = () => {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
@@ -12,35 +12,39 @@ const createId = () => {
   return `group-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 };
 
-const getGroups = () => storageService.getAppData().groups.map(createGroup);
+const getGroups = async (uid) => firestoreService.listGroups(uid);
 
-const saveGroups = (groups) => {
-  const nextGroups = groups.map(createGroup);
-  storageService.updateAppData((data) => ({
-    ...data,
-    groups: nextGroups,
-  }));
-  return getGroups();
-};
-
-const createGroupItem = (groupData) => {
+const createGroupItem = async (uid, groupData) => {
+  const currentGroups = await getGroups(uid);
   const group = createGroup({
     ...groupData,
     id: createId(),
     status: 'inactive',
+    order: currentGroups.length,
   });
 
-  return saveGroups([...getGroups(), group]);
+  return firestoreService.createGroup(uid, group, group.order);
 };
 
-const updateGroupItem = (groupId, updates) => {
-  const groups = getGroups().map(group =>
-    group.id === groupId ? createGroup({ ...group, ...updates }) : group
-  );
-  return saveGroups(groups);
+const updateGroupItem = async (uid, groupId, updates) => {
+  const groups = await getGroups(uid);
+  const groupToUpdate = groups.find((group) => group.id === groupId);
+
+  if (!groupToUpdate) {
+    return groups;
+  }
+
+  const nextGroup = createGroup({
+    ...groupToUpdate,
+    ...updates,
+    id: groupToUpdate.id,
+    order: groupToUpdate.order,
+  });
+
+  return firestoreService.updateGroup(uid, nextGroup, groupToUpdate.order);
 };
 
-const deleteGroupItem = (groupId) => saveGroups(getGroups().filter((group) => group.id !== groupId));
+const deleteGroupItem = (uid, groupId) => firestoreService.deleteGroup(uid, groupId);
 
 const getGroupStatus = (groupId, tasks) => {
   const groupTasks = tasks.filter((task) => task.groupId === groupId);

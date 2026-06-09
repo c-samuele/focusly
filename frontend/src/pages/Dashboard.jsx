@@ -57,6 +57,11 @@ function Dashboard() {
     setActiveTab,
     statsPeriod,
     setStatsPeriod,
+    authUser,
+    signOut,
+    reimportLocalData,
+    isReimporting,
+    appError,
   } = useAppStore();
   const {
     activeTask,
@@ -195,6 +200,18 @@ function Dashboard() {
     setTheme((current) => (current === 'dark' ? 'light' : 'dark'));
   };
 
+  const handleReimportLocalData = () => {
+    const confirmed = window.confirm(
+      'Vuoi davvero reimportare i dati da localStorage su Firestore? I documenti con lo stesso ID verranno aggiornati, quelli mancanti su Firestore non verranno cancellati.'
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    reimportLocalData();
+  };
+
   // Responsive: show sidebar toggle only on tablet/mobile
   const showSidebarToggle = typeof window !== 'undefined' && window.innerWidth <= 1024;
 
@@ -210,6 +227,10 @@ function Dashboard() {
           onToggleTheme={toggleTheme}
           isFullscreen={isFullscreen}
           onToggleFullscreen={toggleFullscreen}
+          authUser={authUser}
+          onReimportLocalData={handleReimportLocalData}
+          isReimporting={isReimporting}
+          onSignOut={signOut}
         />
       }
       sidebar={
@@ -233,6 +254,7 @@ function Dashboard() {
               : 'main-content--tasks'
           }
         >
+          {appError ? <div className="firebase-inline-error">{appError}</div> : null}
           {activeTab === 'analytics' ? (
             <AnalyticsZone
               stats={studyStats}

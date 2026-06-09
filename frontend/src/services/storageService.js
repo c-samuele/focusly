@@ -1,6 +1,7 @@
 // Servizio di persistenza locale.
-// Gestisce lettura, normalizzazione, migrazione legacy e salvataggio in localStorage.
+// Gestisce backup locale, migrazione legacy e metadati per la migrazione Firebase.
 const APP_STORAGE_KEY = 'studyPlannerData';
+const MIGRATION_META_KEY = 'studyPlannerMigrationMeta';
 const LEGACY_TASKS_KEY = 'tasks';
 const LEGACY_GROUPS_KEY = 'groups';
 const isBrowser = typeof window !== 'undefined';
@@ -123,8 +124,32 @@ const updateAppData = (updater) => {
   return setAppData(updatedData);
 };
 
+const getMigrationMeta = () => {
+  if (!isBrowser) {
+    return null;
+  }
+
+  return safeParse(window.localStorage.getItem(MIGRATION_META_KEY), null);
+};
+
+const setMigrationMeta = (meta) => {
+  if (!isBrowser) {
+    return null;
+  }
+
+  try {
+    window.localStorage.setItem(MIGRATION_META_KEY, JSON.stringify(meta));
+    return meta;
+  } catch (error) {
+    console.error('Failed to save migration metadata', error);
+    return getMigrationMeta();
+  }
+};
+
 export const storageService = {
   getAppData,
+  getMigrationMeta,
   setAppData,
+  setMigrationMeta,
   updateAppData,
 };

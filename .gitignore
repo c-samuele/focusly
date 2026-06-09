@@ -1,5 +1,6 @@
 # local tooling
 .claude/
+.codex/
 
 # dependencies
 node_modules/
@@ -34,4 +35,10 @@ backend/.env.*
 .idea/
 
 # generated docs
-relazione-progetto.pdf
+*.aux
+*.fdb_latexmk
+*.fls
+*.out
+*.synctex.gz
+*.toc
+docs/specification/*.pdf

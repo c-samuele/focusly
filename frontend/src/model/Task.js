@@ -20,6 +20,7 @@ const createTask = (data = {}) => ({
   completed: Boolean(data.completed),
   priority: PRIORITIES.includes(data.priority) ? data.priority : 'medium',
   groupId: data.groupId ?? '',
+  order: Number.isFinite(Number(data.order)) ? Number(data.order) : 0,
   scheduledDate: data.scheduledDate ?? getTodayDate(),
   createdAt: data.createdAt ?? new Date().toISOString(),
   completedAt: data.completed ? data.completedAt ?? data.createdAt ?? new Date().toISOString() : null,
