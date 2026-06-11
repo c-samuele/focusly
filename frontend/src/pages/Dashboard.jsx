@@ -1,19 +1,21 @@
 // Pagina principale dell'applicazione.
 // Compone layout adaptivo, dati derivati, analytics, gruppi, task e timer.
 import { useEffect, useMemo, useState } from 'react';
-import Header from '../components/Layout/Header';
-import DashboardLayout from '../components/Layout/DashboardLayout';
-import Sidebar from '../components/Layout/Sidebar';
-import MainContent from '../components/Layout/MainContent';
 import AnalyticsZone from '../components/Dashboard/AnalyticsZone';
+import DashboardLayout from '../components/Layout/DashboardLayout';
+import Header from '../components/Layout/Header';
+import MainContent from '../components/Layout/MainContent';
+import Sidebar from '../components/Layout/Sidebar';
+import SettingsPanel from '../components/Settings/SettingsPanel';
 import FocusTimerPanel from '../components/Task/FocusTimerPanel';
 import TaskList from '../components/Task/TaskList';
+import SyncDataModal from '../components/UI/SyncDataModal';
 import { useFullscreen } from '../hooks/useFullscreen';
 import { useGroups } from '../hooks/useGroups';
 import { useTaskTimer } from '../hooks/useTaskTimer';
 import { useTasks } from '../hooks/useTasks';
-import { useAppStore } from '../state/store';
 import { analyticsService } from '../services/analyticsService';
+import { useAppStore } from '../state/store';
 
 const formatRemainingTime = (totalSeconds) => {
   const minutes = Math.floor(totalSeconds / 60);
@@ -47,6 +49,7 @@ function Dashboard() {
   const { groups, selectedGroupId, createGroup, updateGroup, deleteGroup, selectGroup } = useGroups();
   const { tasks, allTasks, createTask, updateTask, deleteTask, toggleTaskComplete } = useTasks();
   const [editingTask, setEditingTask] = useState(null);
+  const [isSyncModalOpen, setIsSyncModalOpen] = useState(false);
   const [theme, setTheme] = useState(getInitialTheme);
   const { isFullscreen, toggleFullscreen } = useFullscreen();
   const {
@@ -62,6 +65,7 @@ function Dashboard() {
     reimportLocalData,
     isReimporting,
     appError,
+    migrationSource,
   } = useAppStore();
   const {
     activeTask,
@@ -74,7 +78,6 @@ function Dashboard() {
     getTaskRemainingSeconds,
   } = useTaskTimer(allTasks, toggleTaskComplete);
 
-  // Close sidebar on larger screens
   useEffect(() => {
     const handleResize = () => {
       if (window.innerWidth > 1024) {
@@ -93,7 +96,9 @@ function Dashboard() {
 
   const selectedGroup = groups.find((group) => group.id === selectedGroupId) ?? null;
   const pendingTasks = tasks.filter((task) => !task.completed);
-  
+  const pendingTasksCount = allTasks.filter((task) => !task.completed).length;
+  const completedTasksCount = allTasks.length - pendingTasksCount;
+
   const periodTasks = useMemo(
     () => {
       const periodBounds = analyticsService.getCurrentPeriodBounds(statsPeriod);
@@ -195,113 +200,160 @@ function Dashboard() {
     setActiveTab('analytics');
   };
 
+  const handleShowSettings = () => {
+    setActiveTab('settings');
+  };
+
   const getTimerLabel = (task) => formatRemainingTime(getTaskRemainingSeconds(task));
+
   const toggleTheme = () => {
     setTheme((current) => (current === 'dark' ? 'light' : 'dark'));
   };
 
-  const handleReimportLocalData = () => {
-    const confirmed = window.confirm(
-      'Vuoi davvero reimportare i dati da localStorage su Firestore? I documenti con lo stesso ID verranno aggiornati, quelli mancanti su Firestore non verranno cancellati.'
-    );
+  const handleSetTheme = (nextTheme) => {
+    setTheme(nextTheme === 'dark' ? 'dark' : 'light');
+  };
 
-    if (!confirmed) {
+  const handleOpenSyncModal = () => {
+    setIsSyncModalOpen(true);
+  };
+
+  const handleCloseSyncModal = () => {
+    if (isReimporting) {
       return;
     }
 
+    setIsSyncModalOpen(false);
+  };
+
+  const handleConfirmReimportLocalData = () => {
+    setIsSyncModalOpen(false);
     reimportLocalData();
   };
 
-  // Responsive: show sidebar toggle only on tablet/mobile
   const showSidebarToggle = typeof window !== 'undefined' && window.innerWidth <= 1024;
 
   return (
-    <DashboardLayout
-      header={
-        <Header
-          onToggleSidebar={toggleSidebar}
-          showSidebarToggle={showSidebarToggle}
-          activeTab={activeTab}
-          onShowAnalytics={handleShowAnalytics}
-          theme={theme}
-          onToggleTheme={toggleTheme}
-          isFullscreen={isFullscreen}
-          onToggleFullscreen={toggleFullscreen}
-          authUser={authUser}
-          onReimportLocalData={handleReimportLocalData}
-          isReimporting={isReimporting}
-          onSignOut={signOut}
-        />
-      }
-      sidebar={
-        <Sidebar
-          isOpen={sidebarOpen}
-          onClose={() => setSidebarOpen(false)}
-          groups={groups}
-          selectedGroupId={selectedGroupId}
-          onCreateGroup={createGroup}
-          onUpdateGroup={updateGroup}
-          onDeleteGroup={handleDeleteGroup}
-          onSelectGroup={handleSelectGroup}
-          taskCounts={taskCounts}
-        />
-      }
-      mainContent={
-        <MainContent
-          className={
-            activeTab === 'analytics'
-              ? 'main-content--analytics'
-              : 'main-content--tasks'
-          }
-        >
-          {appError ? <div className="firebase-inline-error">{appError}</div> : null}
-          {activeTab === 'analytics' ? (
-            <AnalyticsZone
-              stats={studyStats}
-              period={statsPeriod}
-              onPeriodChange={setStatsPeriod}
-              historyStats={historyStats}
-              periodTasks={periodTasks}
-              theme={theme}
-              activeTaskId={activeTaskId}
-              isRunning={isRunning}
-              onStartTimer={startTimer}
-              onPauseTimer={pauseTimer}
-            />
-          ) : (
-            <TaskList
-              groupName={selectedGroup?.name ?? 'Tasks'}
-              group={selectedGroup}
-              tasks={tasks}
-              pendingTasks={pendingTasks}
-              editingTask={editingTask}
-              onCreateTask={handleCreateTask}
-              onUpdateTask={handleUpdateTask}
-              onDeleteTask={handleDeleteTask}
-              activeTaskId={activeTaskId}
-              isRunning={isRunning}
-              onToggleComplete={toggleTaskComplete}
-              onEditTask={setEditingTask}
-              onCancelEdit={() => setEditingTask(null)}
-              hasSelectedGroup={Boolean(selectedGroupId)}
-              onStartTimer={startTimer}
-              onPauseTimer={pauseTimer}
-              onResetTimer={resetTimer}
-              getTimerLabel={getTimerLabel}
-            />
-          )}
-
-          <FocusTimerPanel
-            activeTask={activeTask}
-            isRunning={isRunning}
-            activeTimerLabel={formatRemainingTime(remainingSeconds)}
-            onStartTimer={startTimer}
-            onPauseTimer={pauseTimer}
-            onResetTimer={resetTimer}
+    <>
+      <DashboardLayout
+        header={(
+          <Header
+            onToggleSidebar={toggleSidebar}
+            showSidebarToggle={showSidebarToggle}
+            activeTab={activeTab}
+            onShowAnalytics={handleShowAnalytics}
+            onShowSettings={handleShowSettings}
+            theme={theme}
+            onToggleTheme={toggleTheme}
+            isFullscreen={isFullscreen}
+            onToggleFullscreen={toggleFullscreen}
+            authUser={authUser}
+            onOpenSyncModal={handleOpenSyncModal}
+            isReimporting={isReimporting}
+            onSignOut={signOut}
           />
-        </MainContent>
-      }
-    />
+        )}
+        sidebar={(
+          <Sidebar
+            isOpen={sidebarOpen}
+            onClose={() => setSidebarOpen(false)}
+            groups={groups}
+            selectedGroupId={selectedGroupId}
+            onCreateGroup={createGroup}
+            onUpdateGroup={updateGroup}
+            onDeleteGroup={handleDeleteGroup}
+            onSelectGroup={handleSelectGroup}
+            taskCounts={taskCounts}
+          />
+        )}
+        mainContent={(
+          <MainContent
+            className={
+              activeTab === 'analytics'
+                ? 'main-content--analytics'
+                : activeTab === 'settings'
+                  ? 'main-content--settings'
+                  : 'main-content--tasks'
+            }
+          >
+            {appError ? <div className="firebase-inline-error">{appError}</div> : null}
+            {activeTab === 'analytics' ? (
+              <AnalyticsZone
+                stats={studyStats}
+                period={statsPeriod}
+                onPeriodChange={setStatsPeriod}
+                historyStats={historyStats}
+                periodTasks={periodTasks}
+                theme={theme}
+                activeTaskId={activeTaskId}
+                isRunning={isRunning}
+                onStartTimer={startTimer}
+                onPauseTimer={pauseTimer}
+              />
+            ) : activeTab === 'settings' ? (
+              <SettingsPanel
+                theme={theme}
+                onSetTheme={handleSetTheme}
+                statsPeriod={statsPeriod}
+                onStatsPeriodChange={setStatsPeriod}
+                authUser={authUser}
+                groupsCount={groups.length}
+                tasksCount={allTasks.length}
+                completedTasksCount={completedTasksCount}
+                pendingTasksCount={pendingTasksCount}
+                selectedGroupName={selectedGroup?.name ?? ''}
+                migrationSource={migrationSource}
+                isReimporting={isReimporting}
+                onOpenSyncModal={handleOpenSyncModal}
+                onShowAnalytics={handleShowAnalytics}
+              />
+            ) : (
+              <TaskList
+                groupName={selectedGroup?.name ?? 'Tasks'}
+                group={selectedGroup}
+                tasks={tasks}
+                pendingTasks={pendingTasks}
+                editingTask={editingTask}
+                onCreateTask={handleCreateTask}
+                onUpdateTask={handleUpdateTask}
+                onDeleteTask={handleDeleteTask}
+                activeTaskId={activeTaskId}
+                isRunning={isRunning}
+                onToggleComplete={toggleTaskComplete}
+                onEditTask={setEditingTask}
+                onCancelEdit={() => setEditingTask(null)}
+                hasSelectedGroup={Boolean(selectedGroupId)}
+                onStartTimer={startTimer}
+                onPauseTimer={pauseTimer}
+                onResetTimer={resetTimer}
+                getTimerLabel={getTimerLabel}
+              />
+            )}
+
+            {activeTab !== 'settings' ? (
+              <FocusTimerPanel
+                activeTask={activeTask}
+                isRunning={isRunning}
+                activeTimerLabel={formatRemainingTime(remainingSeconds)}
+                onStartTimer={startTimer}
+                onPauseTimer={pauseTimer}
+                onResetTimer={resetTimer}
+              />
+            ) : null}
+          </MainContent>
+        )}
+      />
+
+      <SyncDataModal
+        isOpen={isSyncModalOpen}
+        isSubmitting={isReimporting}
+        groupsCount={groups.length}
+        tasksCount={allTasks.length}
+        pendingTasksCount={pendingTasksCount}
+        onCancel={handleCloseSyncModal}
+        onConfirm={handleConfirmReimportLocalData}
+      />
+    </>
   );
 }
 
