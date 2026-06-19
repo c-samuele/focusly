@@ -38,6 +38,7 @@ function Dashboard() {
   const [editingTask, setEditingTask] = useState(null);
   const [isSyncModalOpen, setIsSyncModalOpen] = useState(false);
   const [theme, setTheme] = useState(getInitialTheme);
+  const [analyticsReferenceDate, setAnalyticsReferenceDate] = useState(() => new Date());
   const [groupWorkspace, setGroupWorkspace] = useState(createWorkspaceState);
   const { isFullscreen, toggleFullscreen } = useFullscreen();
   const {
@@ -90,7 +91,7 @@ function Dashboard() {
 
   const periodTasks = useMemo(
     () => {
-      const periodBounds = analyticsService.getCurrentPeriodBounds(statsPeriod);
+      const periodBounds = analyticsService.getCurrentPeriodBounds(statsPeriod, analyticsReferenceDate);
 
       return allTasks
         .filter((task) => (
@@ -122,17 +123,26 @@ function Dashboard() {
           return left.title.localeCompare(right.title);
         });
     },
-    [allTasks, groups, statsPeriod]
+    [allTasks, analyticsReferenceDate, groups, statsPeriod]
   );
 
   const studyStats = useMemo(
-    () => analyticsService.buildStudyStats({ tasks: allTasks, groups, period: statsPeriod }),
-    [allTasks, groups, statsPeriod]
+    () => analyticsService.buildStudyStats({
+      tasks: allTasks,
+      groups,
+      period: statsPeriod,
+      referenceDate: analyticsReferenceDate,
+    }),
+    [allTasks, analyticsReferenceDate, groups, statsPeriod]
   );
 
   const historyStats = useMemo(
-    () => analyticsService.buildHistoryStats({ tasks: allTasks, period: statsPeriod }),
-    [allTasks, statsPeriod]
+    () => analyticsService.buildHistoryStats({
+      tasks: allTasks,
+      period: statsPeriod,
+      referenceDate: analyticsReferenceDate,
+    }),
+    [allTasks, analyticsReferenceDate, statsPeriod]
   );
 
   const taskCounts = allTasks.filter((task) => !task.completed).reduce((counts, task) => {
@@ -239,6 +249,20 @@ function Dashboard() {
     setActiveTab('settings');
   };
 
+  const handleStatsPeriodChange = (nextPeriod) => {
+    setStatsPeriod(nextPeriod);
+  };
+
+  const handleShiftAnalyticsPeriod = (direction) => {
+    setAnalyticsReferenceDate((current) => {
+      if (direction > 0 && !analyticsService.canShiftPeriodForward(statsPeriod, current)) {
+        return current;
+      }
+
+      return analyticsService.shiftPeriodReferenceDate(statsPeriod, current, direction);
+    });
+  };
+
   useEffect(() => {
     if (groupWorkspace.mode && groupWorkspace.mode !== 'create' && !workspaceGroup) {
       setGroupWorkspace(createWorkspaceState());
@@ -246,10 +270,6 @@ function Dashboard() {
   }, [groupWorkspace.mode, workspaceGroup]);
 
   const getTimerLabel = (task) => formatRemainingTime(getTaskRemainingSeconds(task));
-
-  const toggleTheme = () => {
-    setTheme((current) => (current === 'dark' ? 'light' : 'dark'));
-  };
 
   const handleSetTheme = (nextTheme) => {
     setTheme(nextTheme === 'dark' ? 'dark' : 'light');
@@ -284,13 +304,9 @@ function Dashboard() {
             activeTab={activeTab}
             onShowAnalytics={handleShowAnalytics}
             onShowSettings={handleShowSettings}
-            theme={theme}
-            onToggleTheme={toggleTheme}
             isFullscreen={isFullscreen}
             onToggleFullscreen={toggleFullscreen}
             authUser={authUser}
-            onOpenSyncModal={handleOpenSyncModal}
-            isReimporting={isReimporting}
             onSignOut={signOut}
           />
         )}
@@ -323,7 +339,7 @@ function Dashboard() {
               <AnalyticsZone
                 stats={studyStats}
                 period={statsPeriod}
-                onPeriodChange={setStatsPeriod}
+                onPeriodChange={handleStatsPeriodChange}
                 historyStats={historyStats}
                 periodTasks={periodTasks}
                 theme={theme}
@@ -331,13 +347,16 @@ function Dashboard() {
                 isRunning={isRunning}
                 onStartTimer={startTimer}
                 onPauseTimer={pauseTimer}
+                onShiftBackward={() => handleShiftAnalyticsPeriod(-1)}
+                onShiftForward={() => handleShiftAnalyticsPeriod(1)}
+                canShiftForward={analyticsService.canShiftPeriodForward(statsPeriod, analyticsReferenceDate)}
               />
             ) : activeTab === 'settings' ? (
               <SettingsPanel
                 theme={theme}
                 onSetTheme={handleSetTheme}
                 statsPeriod={statsPeriod}
-                onStatsPeriodChange={setStatsPeriod}
+                onStatsPeriodChange={handleStatsPeriodChange}
                 authUser={authUser}
                 groupsCount={groups.length}
                 tasksCount={allTasks.length}

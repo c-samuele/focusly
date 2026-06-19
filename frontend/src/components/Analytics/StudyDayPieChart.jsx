@@ -70,7 +70,7 @@ function StudyDayPieChart({ stats, theme = 'light' }) {
     return (
       <div className="history-card day-breakdown-card">
         <div className="day-breakdown-card__empty">
-          <p>No completed study time recorded yet for today.</p>
+          <p>No completed study time recorded for this day yet.</p>
         </div>
       </div>
     );
@@ -93,7 +93,7 @@ function StudyDayPieChart({ stats, theme = 'light' }) {
               />
               <div>
                 <strong>{item.groupName}</strong>
-                <p>{formatMinutes(item.studyMinutes)} today</p>
+                <p>{formatMinutes(item.studyMinutes)} logged</p>
               </div>
             </article>
           ))}

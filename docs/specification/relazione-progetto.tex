@@ -1,1743 +1,315 @@
-\documentclass[12pt,a4paper]{report}
+\documentclass[11pt,a4paper]{article}
 
 \usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
 \usepackage[italian]{babel}
-\usepackage[margin=2.5cm]{geometry}
-\usepackage{graphicx}
-\usepackage{float}
-\usepackage{fancyhdr}
+\usepackage[margin=2.4cm]{geometry}
 \usepackage{hyperref}
+\usepackage{array}
+\usepackage{booktabs}
 \usepackage{listings}
 \usepackage{xcolor}
-\usepackage{tikz}
-\usepackage{pgfplots}
-\usepackage{array}
-\usepackage{multirow}
-\usepackage{booktabs}
-\usepackage{amsmath}
-\usepackage{amssymb}
+\usepackage{enumitem}
 
-% Configurazione codice
+\hypersetup{
+  colorlinks=true,
+  linkcolor=black,
+  urlcolor=blue
+}
+
+\renewcommand{\contentsname}{Indice}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0.45em}
+\emergencystretch=2em
+\setlist[itemize]{topsep=2pt,itemsep=2pt,leftmargin=1.2cm}
+\setlist[enumerate]{topsep=2pt,itemsep=2pt,leftmargin=1.2cm}
+
 \lstset{
-    basicstyle=\ttfamily\small,
-    keywordstyle=\color{blue},
-    commentstyle=\color{gray},
-    stringstyle=\color{red},
-    breaklines=true,
-    backgroundcolor=\color{lightgray!20},
-    frame=single,
-    numbers=left,
-    numberstyle=\tiny,
-    stepnumber=1,
-    language=C
+  basicstyle=\ttfamily\small,
+  breaklines=true,
+  frame=single,
+  backgroundcolor=\color{black!3}
 }
 
-\pagestyle{fancy}
-\fancyhf{}
-\rhead{\thepage}
-\lhead{Study Planner - Relazione di Progetto}
-
-\title{
-    \textbf{RELAZIONE DI PROGETTO}\\[0.5cm]
-    \Large Study Planner: Applicazione Distribuita per la Gestione Collaborativa di Task\\[0.3cm]
-    \normalsize Progetto di Esame - Reti di Calcolatori
-}
-\author{Studente}
-\date{Maggio 2026}
+\title{\textbf{Relazione tecnica sulla parte di rete e sulla business logic}\\
+\large Focusly -- Progetto di Reti di Calcolatori}
+\author{Samuele Caporale \\ Matricola 329096 \\ A.A. 2025/2026}
+\date{}
 
 \begin{document}
 
 \maketitle
-
 \tableofcontents
-\newpage
+\bigskip
 
-% ==================== CAPITOLO 1 ====================
-\chapter{Introduzione}
+\section{Introduzione}
 
-\section{Contesto e Motivazione}
+La presente relazione descrive il funzionamento della parte di collegamento di rete dell'applicazione \emph{Focusly}, con particolare attenzione all'integrazione tra frontend React, Firebase Authentication e Cloud Firestore. L'analisi e` stata ricostruita a partire dal codice effettivamente presente nel progetto, in particolare nei moduli \texttt{frontend/src/lib/firebase.js}, \texttt{frontend/src/services/*} e \texttt{frontend/src/state/store.js}.
 
-Il progetto \textit{Study Planner} è un'applicazione web distribuita progettata per la gestione collaborativa di task di studio, organizzati in gruppi con metriche analitiche e timer di focus pomodoro. L'applicazione è concepita come caso di studio per le problematiche architetturali tipiche delle reti di calcolatori moderne.
+L'obiettivo dell'app e` gestire task di studio, gruppi tematici e milestone, mantenendo la sincronizzazione dei dati su cloud mediante autenticazione Google e persistenza su Firestore. Dal punto di vista delle reti di calcolatori, il progetto realizza una tipica architettura client-cloud: il browser esegue la SPA React e comunica direttamente con i servizi Firebase tramite connessioni HTTPS gestite dall'SDK ufficiale.
 
-\subsection{Problema Affrontato}
+\section{Architettura di rete dell'applicazione}
 
-Gli studenti necessitano di uno strumento centralizzato per:
+\subsection{Vista generale}
+
+L'architettura realmente utilizzata nella versione corrente e` la seguente:
+
+\begin{lstlisting}
+Browser
+  -> React 18 + Vite
+  -> Firebase Authentication (Google Sign-In)
+  -> Cloud Firestore
+\end{lstlisting}
+
+Il frontend costituisce quindi il nodo applicativo principale. Non e` presente, nella V1, un backend custom interposto tra client e database per le operazioni di business ordinarie. Nel repository esiste una cartella \texttt{backend/}, ma il suo ruolo attuale e` solo di scaffold tecnico: espone un endpoint di health check e un layer socket iniziale, senza essere coinvolto nel flusso dati di task, gruppi o autenticazione. Questo aspetto e` importante perche' la comunicazione di rete effettiva dell'app avviene direttamente tra browser e infrastruttura Firebase.
+
+\subsection{Tecnologie coinvolte}
+
+\begin{center}
+\begin{tabular}{p{3.2cm} p{9.3cm}}
+\toprule
+Componente & Funzione principale \\
+\midrule
+React 18 & Rendering della SPA e gestione dell'interfaccia utente \\
+Zustand & Store globale per stato applicativo, bootstrap e azioni asincrone \\
+Firebase Auth & Identificazione dell'utente tramite account Google \\
+Cloud Firestore & Persistenza cloud di profilo utente, task, gruppi e milestone \\
+localStorage & Cache locale e sorgente della migrazione iniziale verso Firestore \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Tipi di comunicazione di rete}
+
+Le interazioni di rete sono di due tipi:
+
 \begin{itemize}
-    \item Organizzare task di studio per materia/gruppo
-    \item Sincronizzare lo stato dei task tra dispositivi
-    \item Collaborare in tempo reale con altri studenti
-    \item Tracciare metriche di produttività attraverso analytics
-    \item Persistere dati in cloud con backup automatico
+  \item autenticazione remota con Google tramite popup, mediata da Firebase Authentication;
+  \item accesso al database Firestore mediante letture, scritture e batch write effettuati dall'SDK Firebase.
 \end{itemize}
 
-\subsection{Requisiti Funzionali}
+Non sono invece presenti nella parte operativa corrente:
+
+\begin{itemize}
+  \item API REST proprietarie per task o gruppi;
+  \item token JWT gestiti dal progetto in modo manuale;
+  \item WebSocket o listener realtime Firestore per l'aggiornamento continuo dell'interfaccia.
+\end{itemize}
+
+\section{Autenticazione con Firebase}
+
+\subsection{Configurazione}
+
+La configurazione Firebase e` centralizzata in \texttt{frontend/src/lib/firebase.js}. Il modulo legge le variabili d'ambiente \texttt{VITE\_FIREBASE\_*}, inizializza l'app Firebase e crea tre oggetti condivisi: \texttt{auth}, \texttt{db} e \texttt{googleProvider}. La scelta di concentrare questa logica in un solo file riduce l'accoppiamento e impedisce inizializzazioni multiple.
+
+Il provider Google viene inoltre configurato con:
+
+\begin{itemize}
+  \item lingua italiana per il flusso di login;
+  \item parametro \texttt{prompt = select\_account}, utile per forzare la scelta esplicita dell'account.
+\end{itemize}
+
+\subsection{Servizio di autenticazione}
+
+Il modulo \texttt{authService.js} espone tre primitive:
+
+\begin{itemize}
+  \item \texttt{signInWithGoogle()}, che avvia \texttt{signInWithPopup()};
+  \item \texttt{signOutUser()}, che invalida la sessione lato Firebase;
+  \item \texttt{subscribeToAuthChanges()}, che usa \texttt{onAuthStateChanged()} per osservare il cambio di utente autenticato.
+\end{itemize}
+
+L'applicazione non interroga continuamente il server per conoscere lo stato della sessione: si appoggia invece al listener di Firebase Auth, che notifica al frontend i cambiamenti di autenticazione. Questo approccio riduce traffico superfluo e complessita` applicativa.
+
+\subsection{Bootstrap della sessione in React}
+
+Nel componente radice \texttt{App.jsx}, una \texttt{useEffect} registra la subscription all'autenticazione. Quando Firebase segnala un utente:
 
 \begin{enumerate}
-    \item \textbf{Gestione Task}: Creazione, modifica, cancellazione e marcatura di task completati
-    \item \textbf{Organizzazione Gruppi}: Raggruppamento task per materia con milestone
-    \item \textbf{Sincronizzazione Real-Time}: Aggiornamento istantaneo stato task tra client
-    \item \textbf{Persistenza Cloud}: Storage dati su servizio cloud (Firebase, AWS S3, ecc.)
-    \item \textbf{Analytics}: Grafici di produttività e metriche di studio
-    \item \textbf{Timer Focus}: Timer pomodoro con notifiche real-time
-    \item \textbf{Autenticazione}: Sistema di login con JWT token
+  \item lo store Zustand richiama \texttt{handleAuthStateChange(user)};
+  \item viene creato o aggiornato il profilo utente in Firestore;
+  \item viene valutata l'eventuale migrazione dei dati locali;
+  \item viene caricato lo stato dell'area di lavoro;
+  \item l'interfaccia passa da schermata di bootstrap alla dashboard.
 \end{enumerate}
 
-\subsection{Requisiti Non Funzionali}
+In caso di assenza di utente autenticato, lo store torna allo stato base e l'app mostra \texttt{SignInScreen}. La business logic di ingresso e uscita dall'app non e` quindi distribuita nei componenti di UI, ma concentrata nello store globale.
 
-\begin{itemize}
-    \item \textbf{Scalabilità}: Architettura orizzontale per supportare N utenti
-    \item \textbf{Latenza}: Sincronizzazione dati $\leq 200ms$ per WebSocket
-    \item \textbf{Disponibilità}: Uptime $\geq 99\%$ con retry automatico
-    \item \textbf{Sicurezza}: HTTPS, JWT authentication, input validation
-    \item \textbf{Performance}: Caricamento pagina $\leq 2s$ (LCP), bundle size $\leq 100KB$ gzip
-\end{itemize}
+\section{Persistenza cloud con Firestore}
 
-\newpage
+\subsection{Modello dati}
 
-% ==================== CAPITOLO 2 ====================
-\chapter{Architettura Complessiva}
-
-\section{Panoramica dell'Architettura}
-
-L'applicazione segue il modello \textbf{Client-Server con API REST} e \textbf{WebSocket} per la comunicazione real-time. La separazione netta tra frontend e backend consente:
-
-\begin{itemize}
-    \item Indipendenza di sviluppo tra team
-    \item Scaling orizzontale del backend
-    \item Possibilità di multiple client (web, mobile, desktop)
-    \item Sicurezza attraverso autenticazione centralizzata
-\end{itemize}
-
-\subsection{Componenti Principali}
-
-\begin{table}[H]
-    \centering
-    \begin{tabular}{|l|p{8cm}|l|}
-        \hline
-        \textbf{Componente} & \textbf{Descrizione} & \textbf{Tecnologia} \\
-        \hline
-        Frontend & SPA con interfaccia utente reattiva & React 18 + Vite \\
-        \hline
-        Backend API & Server REST con autenticazione & Node.js + Express \\
-        \hline
-        Real-Time & Comunicazione bidirezionale sincronizzazione & WebSocket (Socket.io) \\
-        \hline
-        Database & Persistenza dati strutturati & MongoDB / PostgreSQL \\
-        \hline
-        Cloud Storage & Persistenza file e backup & AWS S3 / Firebase Storage \\
-        \hline
-        Cache & Riduzione latenza accessi DB & Redis \\
-        \hline
-    \end{tabular}
-\end{table}
-
-\section{Diagramma Architetturale}
-
-\begin{figure}[H]
-    \centering
-    \begin{tikzpicture}[scale=0.85]
-        % Frontend
-        \draw[fill=blue!20] (1,8) rectangle (4,10);
-        \node at (2.5,9) {Frontend\\\small React 18 + Vite};
-        
-        % Client-side layers
-        \draw[fill=cyan!20] (0.2,6.5) rectangle (1.8,7.5);
-        \node at (1,7) {UI Layer};
-        
-        \draw[fill=cyan!20] (2.2,6.5) rectangle (3.8,7.5);
-        \node at (3,7) {State Mgmt\\\small Zustand};
-        
-        \draw[fill=cyan!20] (4.2,6.5) rectangle (5.8,7.5);
-        \node at (5,7) {API Client\\\small Axios};
-        
-        % Network
-        \draw[thick,->,red] (2.5,6.5) -- (2.5,5.5);
-        \node[red] at (3.5,6) {HTTP/HTTPS\nWebSocket};
-        
-        % Backend
-        \draw[fill=green!20] (1,4) rectangle (4,5.5);
-        \node at (2.5,4.75) {Backend Server\\\small Node.js + Express};
-        
-        % API Routes
-        \draw[fill=yellow!20] (0.2,2.5) rectangle (1.8,3.5);
-        \node at (1,3) {REST API};
-        
-        \draw[fill=yellow!20] (2.2,2.5) rectangle (3.8,3.5);
-        \node at (3,3) {WebSocket\\\small Socket.io};
-        
-        \draw[fill=yellow!20] (4.2,2.5) rectangle (5.8,3.5);
-        \node at (5,3) {Authentication\\\small JWT};
-        
-        % Database layer
-        \draw[thick,->,green] (2.5,2.5) -- (2.5,1.8);
-        \node[green] at (3.2,2.1) {Query Protocol};
-        
-        % Databases
-        \draw[fill=yellow!20] (0.2,0.3) rectangle (1.8,1.5);
-        \node at (1,0.9) {MongoDB};
-        
-        \draw[fill=yellow!20] (2.2,0.3) rectangle (3.8,1.5);
-        \node at (3,0.9) {Redis\\\small Cache};
-        
-        \draw[fill=yellow!20] (4.2,0.3) rectangle (5.8,1.5);
-        \node at (5,0.9) {Cloud Storage\\\small S3/Firebase};
-        
-        % Connections
-        \draw[thick,->] (1,2.5) -- (1,1.5);
-        \draw[thick,->] (3,2.5) -- (3,1.5);
-        \draw[thick,->] (5,2.5) -- (5,1.5);
-        
-        % Frontend to API
-        \draw[thick,->] (5,6.5) -- (5,5.5);
-        \draw[thick,->] (3,6.5) -- (3,5.5);
-        
-    \end{tikzpicture}
-    \caption{Architettura Client-Server con Comunicazione Real-Time}
-\end{figure}
-
-\newpage
-
-% ==================== CAPITOLO 3 ====================
-\chapter{Frontend - Interfaccia Utente}
-
-\section{Struttura del Progetto Frontend}
-
-Il frontend è un'applicazione Single Page Application (SPA) costruita con React 18 e bundling con Vite. La struttura modulare consente riuso dei componenti e separazione delle responsabilità.
-
-\subsection{Organizzazione Cartelle}
-
-\begin{lstlisting}[language=bash]
-frontend/
-├── src/
-│   ├── components/          # Componenti React riutilizzabili
-│   │   ├── Task/            # Task management UI
-│   │   │   ├── TaskForm.jsx       # Form creazione task
-│   │   │   ├── TaskItem.jsx       # Item singolo task
-│   │   │   ├── TaskList.jsx       # Lista task
-│   │   │   ├── FocusTimerPanel.jsx # Timer pomodoro
-│   │   │   └── MilestoneDropdown.jsx
-│   │   ├── Group/           # Group management UI
-│   │   │   ├── GroupItem.jsx
-│   │   │   ├── GroupList.jsx
-│   │   │   ├── CreateGroupModal.jsx
-│   │   │   └── MilestonesList.jsx
-│   │   ├── Analytics/       # Grafici e statistiche
-│   │   │   ├── StudyChart.jsx
-│   │   │   ├── StudyDayPieChart.jsx
-│   │   │   └── StudyHistoryChart.jsx
-│   │   └── UI/
-│   │       └── Button.jsx
-│   ├── pages/               # Pagine dell'app
-│   │   └── Dashboard.jsx
-│   ├── hooks/               # Custom React hooks
-│   │   ├── useGroups.js     # Logica gestione gruppi
-│   │   ├── useTasks.js      # Logica gestione task
-│   │   ├── useTaskTimer.js  # Logica timer
-│   │   ├── useFullscreen.js # Utility fullscreen
-│   │   └── useDropdownPosition.js
-│   ├── services/            # Client HTTP e logica
-│   │   ├── apiClient.js     # Istanza Axios configurato
-│   │   ├── taskService.js   # Endpoint task
-│   │   ├── groupService.js  # Endpoint group
-│   │   ├── analyticsService.js
-│   │   └── storageService.js
-│   ├── state/               # Zustand store
-│   │   └── store.js         # Store centralizzato
-│   ├── model/               # Modelli dati
-│   │   ├── Task.js
-│   │   └── Group.js
-│   ├── utils/               # Utility functions
-│   │   └── timeFormat.js
-│   ├── styles.css           # Stili globali
-│   ├── main.jsx             # Entry point
-│   └── App.jsx              # Root component
-├── package.json
-├── vite.config.js
-└── index.html
-\end{lstlisting}
-
-\subsection{Stack Tecnologico Frontend}
-
-\begin{table}[H]
-    \centering
-    \begin{tabular}{|l|p{10cm}|p{2cm}|}
-        \hline
-        \textbf{Libreria} & \textbf{Utilizzo} & \textbf{Versione} \\
-        \hline
-        React & Framework UI componenti reattive & 18.3.1 \\
-        \hline
-        Vite & Build tool e dev server con HMR & 5.4.10 \\
-        \hline
-        Zustand & State management leggero & 5.0.6 \\
-        \hline
-        Axios & HTTP client per API REST & latest \\
-        \hline
-        Bootstrap & Framework CSS styling & 5.3.8 \\
-        \hline
-        Chart.js & Grafici analytics & 4.4.3 \\
-        \hline
-        Socket.io Client & WebSocket client real-time & latest \\
-        \hline
-    \end{tabular}
-\end{table}
-
-\section{Componenti Chiave}
-
-\subsection{State Management con Zustand}
-
-Il store Zustand centralizzato gestisce lo stato dell'applicazione:
+Il modello Firestore adottato e` gerarchico e multi-tenant per utente:
 
 \begin{lstlisting}
-// state/store.js
-import create from 'zustand';
-import { taskService } from '../services/taskService';
-import { groupService } from '../services/groupService';
-
-export const useAppStore = create((set, get) => ({
-  // State
-  tasks: [],
-  groups: [],
-  selectedGroupId: null,
-  loading: false,
-  error: null,
-  
-  // Selectors
-  getTasksByGroup: (groupId) => 
-    get().tasks.filter(t => t.groupId === groupId),
-  
-  // Actions
-  fetchTasks: async () => {
-    set({ loading: true });
-    try {
-      const tasks = await taskService.getAllTasks();
-      set({ tasks, loading: false });
-    } catch (error) {
-      set({ error: error.message, loading: false });
-    }
-  },
-  
-  createTask: async (taskData) => {
-    try {
-      const newTask = await taskService.createTask(taskData);
-      set(state => ({ 
-        tasks: [...state.tasks, newTask] 
-      }));
-      return newTask;
-    } catch (error) {
-      set({ error: error.message });
-    }
-  },
-  
-  selectGroup: (groupId) => set({ selectedGroupId: groupId }),
-}));
+users/{uid}
+users/{uid}/tasks/{taskId}
+users/{uid}/groups/{groupId}
+users/{uid}/groups/{groupId}/milestones/{milestoneId}
 \end{lstlisting}
 
-\subsection{API Client Service}
+La collezione \texttt{users} contiene il profilo e i metadati di sincronizzazione. Le sottocollezioni \texttt{tasks} e \texttt{groups} rappresentano il workspace dell'utente; ogni gruppo contiene a sua volta le milestone. Questa struttura garantisce isolamento logico dei dati e si integra bene con le regole di sicurezza basate su \texttt{uid}.
 
-\begin{lstlisting}
-// services/apiClient.js
-import axios from 'axios';
+\subsection{Mappatura tra oggetti React e documenti Firestore}
 
-const API_BASE_URL = process.env.REACT_APP_API_URL 
-  || 'http://localhost:5000/api';
+Il modulo \texttt{firestoreMappers.js} svolge una funzione centrale. I suoi compiti principali sono:
 
-const apiClient = axios.create({
-  baseURL: API_BASE_URL,
-  timeout: 10000,
-  headers: {
-    'Content-Type': 'application/json',
-  },
-});
+\begin{itemize}
+  \item conversione delle date JavaScript e delle stringhe ISO in \texttt{Timestamp};
+  \item conversione inversa da \texttt{Timestamp} a oggetti leggibili dal frontend;
+  \item normalizzazione di campi numerici, booleani e delle date pianificate;
+  \item uniformazione del formato dati rispetto ai modelli \texttt{Task} e \texttt{Group}.
+\end{itemize}
 
-// Interceptor per aggiungere token JWT
-apiClient.interceptors.request.use(config => {
-  const token = localStorage.getItem('authToken');
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-  return config;
-});
+Questa separazione evita che i componenti React debbano conoscere il formato interno di Firestore. In termini architetturali, il mapper costituisce un adattatore tra dominio applicativo e livello di persistenza.
 
-// Interceptor per gestire errori
-apiClient.interceptors.response.use(
-  response => response,
-  error => {
-    if (error.response?.status === 401) {
-      // Token scaduto, redirect login
-      window.location.href = '/login';
-    }
-    return Promise.reject(error);
-  }
-);
+\subsection{Operazioni CRUD e batch write}
 
-export default apiClient;
-\end{lstlisting}
+Il modulo piu` rilevante per la comunicazione dati e` \texttt{firestoreService.js}. Esso costruisce riferimenti documentali tramite \texttt{doc()} e \texttt{collection()}, quindi esegue:
 
-\section{Comunicazione Frontend-Backend}
+\begin{itemize}
+  \item letture singole con \texttt{getDoc()};
+  \item letture multiple con \texttt{getDocs()};
+  \item query ordinate con \texttt{orderBy()};
+  \item query filtrate con \texttt{where()};
+  \item scritture idempotenti con \texttt{setDoc()};
+  \item aggiornamenti mirati con \texttt{updateDoc()};
+  \item scritture atomiche multiple con \texttt{writeBatch()}.
+\end{itemize}
 
-\subsection{Flusso di Dati}
+La scelta di usare batch write per create, update e delete permette di mantenere coerenza tra i documenti applicativi e il campo \texttt{workspaceRevision} presente nel profilo utente. Ogni modifica significativa incrementa infatti tale revisione mediante \texttt{increment(1)}. In questo modo l'app puo distinguere se la cache locale e` allineata con lo stato remoto.
 
-Il flusso di dati segue il pattern unidirezionale:
+\subsection{Regole di sicurezza}
+
+Le regole in \texttt{frontend/firestore.rules} definiscono una politica semplice ma corretta:
+
+\begin{itemize}
+  \item lettura e scrittura consentite solo se \texttt{request.auth != null};
+  \item l'utente puo accedere esclusivamente ai documenti associati al proprio \texttt{uid};
+  \item la cancellazione del profilo utente \texttt{users/\{uid\}} e` disabilitata;
+  \item ogni altro percorso Firestore e` negato di default.
+\end{itemize}
+
+Dal punto di vista della sicurezza di rete, la decisione fondamentale e` spostare il controllo di accesso dal frontend alle regole server-side di Firestore. Anche se il client e` modificabile dall'utente finale, il database continua a imporre isolamento tra utenti.
+
+\section{Business logic React e organizzazione software}
+
+\subsection{Ruolo dello store Zustand}
+
+Lo store definito in \texttt{state/store.js} e` il vero orchestratore dell'applicazione. Ospita sia lo stato condiviso sia le principali azioni asincrone. I campi piu` importanti sono:
+
+\begin{itemize}
+  \item \texttt{tasks}, \texttt{groups} e \texttt{selectedGroupId};
+  \item \texttt{authUser}, \texttt{authStatus} e \texttt{dataStatus};
+  \item \texttt{migrationStatus}, \texttt{migrationSource} e \texttt{appError};
+  \item \texttt{workspaceRevision}, usato per la coerenza cache/cloud.
+\end{itemize}
+
+La logica di bootstrap si trova nello store per un motivo preciso: essa deve coordinare autenticazione, migrazione, caricamento remoto e aggiornamento della UI. Se questa logica fosse dispersa in piu` componenti React, il rischio di inconsistenze aumenterebbe.
+
+\subsection{Layer di servizi}
+
+Il frontend usa un layer di servizi separato:
+
+\begin{itemize}
+  \item \texttt{taskService} applica la logica CRUD dei task;
+  \item \texttt{groupService} gestisce CRUD gruppi e calcolo dello stato del gruppo;
+  \item \texttt{migrationService} governa import e reimport da \texttt{localStorage};
+  \item \texttt{analyticsService} calcola statistiche derivate senza accesso di rete;
+  \item \texttt{storageService} realizza persistenza locale e metadati di migrazione.
+\end{itemize}
+
+La logica e` quindi stratificata: i componenti React invocano azioni dello store, lo store richiama i servizi di dominio, e solo il \texttt{firestoreService} conosce i dettagli della persistenza remota.
+
+\subsection{Modelli e stato derivato}
+
+I modelli \texttt{Task.js} e \texttt{Group.js} normalizzano la forma dei dati. Alcune regole di business rilevanti sono:
+
+\begin{itemize}
+  \item i task ricevono sempre un identificatore, un ordine e una data pianificata;
+  \item la priorita` e` vincolata ai valori \texttt{low}, \texttt{medium}, \texttt{high};
+  \item i gruppi possiedono milestone con identificatore stabile;
+  \item lo stato del gruppo non e` persisito come verita` assoluta, ma ricalcolato dai task del giorno.
+\end{itemize}
+
+Quest'ultimo punto e` particolarmente interessante: \texttt{groupService.attachStatuses()} evita ridondanza tra dati persistiti e dati derivati. Un gruppo risulta \texttt{inactive}, \texttt{in\_progress} oppure \texttt{completed} in base ai task associati alla data odierna.
+
+\section{Flussi applicativi principali}
+
+\subsection{Primo accesso e migrazione iniziale}
+
+Il primo login costituisce il flusso di rete piu` ricco. La sequenza implementata e` la seguente:
 
 \begin{enumerate}
-    \item \textbf{Evento UI}: Utente interagisce con componente (es. clic su "Crea Task")
-    \item \textbf{Azione Store}: Hook chiama azione nel store (es. \texttt{createTask()})
-    \item \textbf{API Call}: Servizio HTTP effettua richiesta POST al backend
-    \item \textbf{Server Processing}: Backend valida, processa, salva nel DB
-    \item \textbf{Response}: Server ritorna dati o errore
-    \item \textbf{State Update}: Store aggiorna stato locale
-    \item \textbf{Re-render}: React re-renderizza componenti interessati
+  \item l'utente preme ``Continua con Google'';
+  \item Firebase Auth autentica l'utente e restituisce il suo profilo;
+  \item \texttt{upsertUserProfile()} crea o aggiorna \texttt{users/\{uid\}};
+  \item \texttt{migrationService.migrateOnFirstLogin()} verifica se esiste un backup locale importabile;
+  \item se la migrazione non e` ancora stata eseguita, task, gruppi e milestone vengono copiati in Firestore tramite batch write;
+  \item il profilo utente viene marcato con \texttt{migration.localStorageImported = true};
+  \item l'app decide se avviare la UI da cache locale o da stato remoto;
+  \item al termine la dashboard viene renderizzata.
 \end{enumerate}
 
-\newpage
+La migrazione e` in modalita` \emph{merge only}: i documenti gia` esistenti vengono aggiornati per ID, mentre quelli remoti assenti nel backup locale non vengono cancellati. Questa scelta e` prudente e riduce il rischio di perdita dati.
 
-% ==================== CAPITOLO 4 ====================
-\chapter{Backend - Server e API}
+\subsection{Creazione e aggiornamento dei task}
 
-\section{Architettura Backend}
-
-Il backend è un server Node.js con Express framework, progettato per:
-\begin{itemize}
-    \item Fornire API REST per operazioni CRUD
-    \item Gestire autenticazione e autorizzazione
-    \item Sincronizzazione real-time via WebSocket
-    \item Interazione con database e cloud storage
-\end{itemize}
-
-\subsection{Struttura Progetto Backend}
-
-\begin{lstlisting}[language=bash]
-backend/
-├── src/
-│   ├── server.js                 # Entry point Express
-│   ├── config/
-│   │   ├── database.js           # Config MongoDB/PostgreSQL
-│   │   ├── env.js                # Variabili ambiente
-│   │   └── jwt.js                # Config JWT
-│   ├── routes/
-│   │   ├── auth.js               # Auth endpoints
-│   │   ├── tasks.js              # Task CRUD endpoints
-│   │   ├── groups.js             # Group CRUD endpoints
-│   │   └── analytics.js          # Analytics endpoints
-│   ├── controllers/
-│   │   ├── authController.js     # Logica autenticazione
-│   │   ├── taskController.js     # Logica task
-│   │   ├── groupController.js    # Logica group
-│   │   └── analyticsController.js
-│   ├── models/
-│   │   ├── User.js               # Schema utente (DB)
-│   │   ├── Task.js               # Schema task (DB)
-│   │   └── Group.js              # Schema group (DB)
-│   ├── middleware/
-│   │   ├── authentication.js     # Middleware JWT
-│   │   ├── errorHandler.js       # Error handling
-│   │   └── validation.js         # Input validation
-│   ├── services/
-│   │   ├── cloudStorageService.js  # S3/Firebase upload
-│   │   ├── redisService.js         # Cache Redis
-│   │   └── notificationService.js  # Notifiche
-│   ├── websocket/
-│   │   └── socketHandler.js      # WebSocket events
-│   └── utils/
-│       └── logger.js             # Logging
-├── package.json
-└── .env
-\end{lstlisting}
-
-\section{Stack Tecnologico Backend}
-
-\begin{table}[H]
-    \centering
-    \begin{tabular}{|l|p{9cm}|c|}
-        \hline
-        \textbf{Tecnologia} & \textbf{Utilizzo} & \textbf{Ruolo} \\
-        \hline
-        Node.js & Runtime JavaScript lato server & Runtime \\
-        \hline
-        Express.js & Framework HTTP routing & Web Server \\
-        \hline
-        MongoDB & Database NoSQL documento & Persistenza \\
-        \hline
-        Mongoose & ODM MongoDB & ORM/Validazione \\
-        \hline
-        PostgreSQL & Database SQL relazionale & Persistenza Alt. \\
-        \hline
-        Redis & Cache key-value in-memory & Caching \\
-        \hline
-        Socket.io & WebSocket libreria & Real-time \\
-        \hline
-        JWT & Authentication token & Sicurezza \\
-        \hline
-        AWS S3 / Firebase & Cloud object storage & File storage \\
-        \hline
-        bcrypt & Password hashing & Sicurezza \\
-        \hline
-    \end{tabular}
-\end{table}
-
-\section{API REST Endpoints}
-
-\subsection{Autenticazione}
-
-\begin{table}[H]
-    \centering
-    \begin{tabular}{|c|l|p{7cm}|}
-        \hline
-        \textbf{Metodo} & \textbf{Endpoint} & \textbf{Descrizione} \\
-        \hline
-        POST & \texttt{/api/auth/register} & Registrazione nuovo utente \\
-        \hline
-        POST & \texttt{/api/auth/login} & Login utente, ritorna JWT token \\
-        \hline
-        POST & \texttt{/api/auth/refresh} & Refresh token scaduto \\
-        \hline
-        POST & \texttt{/api/auth/logout} & Logout e invalidazione token \\
-        \hline
-    \end{tabular}
-\end{table}
-
-\subsection{Task Operations (CRUD)}
-
-\begin{table}[H]
-    \centering
-    \begin{tabular}{|c|l|p{7cm}|}
-        \hline
-        \textbf{Metodo} & \textbf{Endpoint} & \textbf{Descrizione} \\
-        \hline
-        GET & \texttt{/api/tasks} & Ottieni tutti i task dell'utente \\
-        \hline
-        GET & \texttt{/api/tasks/:id} & Ottieni task specifico \\
-        \hline
-        GET & \texttt{/api/groups/:groupId/tasks} & Task di un gruppo \\
-        \hline
-        POST & \texttt{/api/tasks} & Crea nuovo task \\
-        \hline
-        PATCH & \texttt{/api/tasks/:id} & Aggiorna task \\
-        \hline
-        DELETE & \texttt{/api/tasks/:id} & Elimina task \\
-        \hline
-    \end{tabular}
-\end{table}
-
-\subsection{Group Operations}
-
-\begin{table}[H]
-    \centering
-    \begin{tabular}{|c|l|p{7cm}|}
-        \hline
-        \textbf{Metodo} & \textbf{Endpoint} & \textbf{Descrizione} \\
-        \hline
-        GET & \texttt{/api/groups} & Ottieni tutti i gruppi \\
-        \hline
-        POST & \texttt{/api/groups} & Crea nuovo gruppo \\
-        \hline
-        PATCH & \texttt{/api/groups/:id} & Aggiorna gruppo \\
-        \hline
-        DELETE & \texttt{/api/groups/:id} & Elimina gruppo \\
-        \hline
-    \end{tabular}
-\end{table}
-
-\section{Implementazione Esempio: Task Controller}
-
-\begin{lstlisting}
-// controllers/taskController.js
-const Task = require('../models/Task');
-const redisService = require('../services/redisService');
-
-exports.createTask = async (req, res) => {
-  try {
-    const { title, description, groupId, dueDate } = req.body;
-    const userId = req.user.id; // Da JWT middleware
-    
-    // Validazione input
-    if (!title || !groupId) {
-      return res.status(400).json({ 
-        error: 'title e groupId obbligatori' 
-      });
-    }
-    
-    // Creazione documento
-    const task = new Task({
-      title,
-      description,
-      groupId,
-      userId,
-      dueDate,
-      completed: false,
-      createdAt: new Date(),
-    });
-    
-    // Salva nel database
-    await task.save();
-    
-    // Invalida cache
-    await redisService.del(`tasks:${userId}`);
-    
-    // Broadcast via WebSocket a tutti i client
-    req.io.to(`group:${groupId}`).emit('task:created', task);
-    
-    res.status(201).json(task);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-};
-
-exports.getTasks = async (req, res) => {
-  try {
-    const userId = req.user.id;
-    const cacheKey = `tasks:${userId}`;
-    
-    // Prova cache Redis
-    const cached = await redisService.get(cacheKey);
-    if (cached) {
-      return res.json(JSON.parse(cached));
-    }
-    
-    // Query database
-    const tasks = await Task.find({ userId })
-      .sort({ createdAt: -1 })
-      .lean();
-    
-    // Salva in cache (TTL 5 minuti)
-    await redisService.setex(cacheKey, 300, JSON.stringify(tasks));
-    
-    res.json(tasks);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-};
-
-exports.updateTask = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { title, completed, dueDate } = req.body;
-    
-    const task = await Task.findByIdAndUpdate(
-      id,
-      { title, completed, dueDate },
-      { new: true, runValidators: true }
-    );
-    
-    // Invalida cache
-    await redisService.del(`tasks:${req.user.id}`);
-    
-    // Broadcast update
-    req.io.to(`group:${task.groupId}`).emit('task:updated', task);
-    
-    res.json(task);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-};
-\end{lstlisting}
-
-\newpage
-
-% ==================== CAPITOLO 5 ====================
-\chapter{Comunicazione Real-Time con WebSocket}
-
-\section{WebSocket e Socket.io}
-
-Per la sincronizzazione real-time dei task e del timer focus, utilizziamo \textbf{Socket.io} che fornisce:
-
-\begin{itemize}
-    \item Fallback automatico a polling HTTP se WebSocket non disponibile
-    \item Reconnection automatica
-    \item Rooms per gestire utenti per gruppo
-    \item Acknowledgments
-\end{itemize}
-
-\section{Implementazione Server}
-
-\begin{lstlisting}
-// server.js
-const express = require('express');
-const { createServer } = require('http');
-const { Server: SocketIOServer } = require('socket.io');
-const jwt = require('jsonwebtoken');
-
-const app = express();
-const httpServer = createServer(app);
-const io = new SocketIOServer(httpServer, {
-  cors: { origin: 'http://localhost:3000' },
-});
-
-// Middleware autenticazione WebSocket
-io.use((socket, next) => {
-  const token = socket.handshake.auth.token;
-  if (!token) return next(new Error('token mancante'));
-  
-  try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    socket.userId = decoded.id;
-    next();
-  } catch (error) {
-    next(new Error('token non valido'));
-  }
-});
-
-// WebSocket event handlers
-io.on('connection', (socket) => {
-  console.log(`Utente ${socket.userId} connesso`);
-  
-  // Join a gruppo
-  socket.on('join:group', (groupId) => {
-    socket.join(`group:${groupId}`);
-    socket.emit('joined:group', { groupId });
-  });
-  
-  // Timer focus aggiornamento
-  socket.on('timer:tick', (data) => {
-    io.to(`group:${data.groupId}`).emit('timer:update', {
-      taskId: data.taskId,
-      timeRemaining: data.timeRemaining,
-      userId: socket.userId,
-    });
-  });
-  
-  // Task aggiornamento real-time
-  socket.on('task:complete', async (taskId) => {
-    // Aggiorna in DB
-    const task = await Task.findByIdAndUpdate(
-      taskId,
-      { completed: true, completedAt: new Date() },
-      { new: true }
-    );
-    
-    // Notifica altri client
-    io.to(`group:${task.groupId}`).emit('task:completed', task);
-  });
-  
-  socket.on('disconnect', () => {
-    console.log(`Utente ${socket.userId} disconnesso`);
-  });
-});
-
-httpServer.listen(5000, () => {
-  console.log('Server listening on port 5000');
-});
-\end{lstlisting}
-
-\section{Implementazione Client}
-
-\begin{lstlisting}
-// hooks/useWebSocket.js
-import { useEffect } from 'react';
-import io from 'socket.io-client';
-import { useAppStore } from '../state/store';
-
-export const useWebSocket = () => {
-  const { selectedGroupId, updateTask } = useAppStore();
-  
-  useEffect(() => {
-    const token = localStorage.getItem('authToken');
-    const socket = io('http://localhost:5000', {
-      auth: { token },
-      reconnection: true,
-      reconnectionDelay: 1000,
-      reconnectionDelayMax: 5000,
-      reconnectionAttempts: 5,
-    });
-    
-    socket.on('connect', () => {
-      console.log('Connesso al server WebSocket');
-      if (selectedGroupId) {
-        socket.emit('join:group', selectedGroupId);
-      }
-    });
-    
-    socket.on('task:updated', (task) => {
-      updateTask(task);
-    });
-    
-    socket.on('task:completed', (task) => {
-      updateTask({ ...task, completed: true });
-    });
-    
-    socket.on('timer:update', (data) => {
-      // Aggiorna stato timer
-      useAppStore.setState(state => ({
-        timers: {
-          ...state.timers,
-          [data.taskId]: data.timeRemaining,
-        }
-      }));
-    });
-    
-    return () => socket.disconnect();
-  }, [selectedGroupId]);
-};
-\end{lstlisting}
-
-\section{Latenza Real-Time}
-
-La latenza end-to-end della sincronizzazione è calcolata come:
-
-$$\Delta t = t_{client\_send} + t_{network} + t_{server\_process} + t_{broadcast}$$
-
-Dove:
-\begin{itemize}
-    \item $t_{client\_send}$: tempo per serializzare e inviare il messaggio ($\sim 1ms$)
-    \item $t_{network}$: latenza di rete TCP/IP ($\sim 50-100ms$ in LAN)
-    \item $t_{server\_process}$: elaborazione e query DB ($\sim 10-50ms$)
-    \item $t_{broadcast}$: trasmissione ai client ($\sim 20-50ms$)
-\end{itemize}
-
-Totale atteso: $\approx 100-200ms$ per aggiornamento sincronizzato tra client.
-
-\newpage
-
-% ==================== CAPITOLO 6 ====================
-\chapter{Database e Modello Dati}
-
-\section{Schema Database}
-
-\subsection{MongoDB Schema (Document-based)}
-
-\begin{lstlisting}
-// models/User.js
-const userSchema = new Schema({
-  _id: ObjectId,
-  email: { type: String, required: true, unique: true },
-  passwordHash: String,
-  name: String,
-  createdAt: { type: Date, default: Date.now },
-  preferences: {
-    theme: String,
-    notifications: Boolean,
-  }
-});
-
-// models/Group.js
-const groupSchema = new Schema({
-  _id: ObjectId,
-  userId: ObjectId,
-  name: { type: String, required: true },
-  description: String,
-  color: String,
-  milestones: [
-    {
-      name: String,
-      dueDate: Date,
-      completedAt: Date,
-    }
-  ],
-  createdAt: { type: Date, default: Date.now },
-});
-
-// models/Task.js
-const taskSchema = new Schema({
-  _id: ObjectId,
-  userId: ObjectId,
-  groupId: ObjectId,
-  title: { type: String, required: true },
-  description: String,
-  completed: { type: Boolean, default: false },
-  completedAt: Date,
-  dueDate: Date,
-  priorityLevel: {
-    type: String,
-    enum: ['low', 'medium', 'high'],
-    default: 'medium'
-  },
-  focusTimeLogged: { type: Number, default: 0 }, // minuti
-  createdAt: { type: Date, default: Date.now },
-});
-\end{lstlisting}
-
-\subsection{PostgreSQL Schema (Relazionale)}
-
-\begin{lstlisting}[language=sql]
-CREATE TABLE users (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  email VARCHAR(255) UNIQUE NOT NULL,
-  password_hash VARCHAR(255),
-  name VARCHAR(255),
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  preferences JSONB
-);
-
-CREATE TABLE groups (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID NOT NULL REFERENCES users(id),
-  name VARCHAR(255) NOT NULL,
-  description TEXT,
-  color VARCHAR(7),
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE TABLE tasks (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID NOT NULL REFERENCES users(id),
-  group_id UUID NOT NULL REFERENCES groups(id),
-  title VARCHAR(255) NOT NULL,
-  description TEXT,
-  completed BOOLEAN DEFAULT FALSE,
-  completed_at TIMESTAMP,
-  due_date TIMESTAMP,
-  priority_level VARCHAR(10) DEFAULT 'medium',
-  focus_time_logged INTEGER DEFAULT 0,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE INDEX idx_tasks_user_id ON tasks(user_id);
-CREATE INDEX idx_tasks_group_id ON tasks(group_id);
-CREATE INDEX idx_groups_user_id ON groups(user_id);
-\end{lstlisting}
-
-\section{Relazioni Dati}
-
-\begin{figure}[H]
-    \centering
-    \begin{tikzpicture}
-        % Users table
-        \draw (0,3) rectangle (2,5);
-        \node[anchor=north west] at (0.1,4.9) {\textbf{users}};
-        \node[anchor=west,font=\small] at (0.1,4.6) {id (PK)};
-        \node[anchor=west,font=\small] at (0.1,4.3) {email};
-        \node[anchor=west,font=\small] at (0.1,4.0) {password\_hash};
-        \node[anchor=west,font=\small] at (0.1,3.7) {name};
-        \node[anchor=west,font=\small] at (0.1,3.4) {preferences};
-        
-        % Groups table
-        \draw (3,3) rectangle (5,5);
-        \node[anchor=north west] at (3.1,4.9) {\textbf{groups}};
-        \node[anchor=west,font=\small] at (3.1,4.6) {id (PK)};
-        \node[anchor=west,font=\small] at (3.1,4.3) {user\_id (FK)};
-        \node[anchor=west,font=\small] at (3.1,4.0) {name};
-        \node[anchor=west,font=\small] at (3.1,3.7) {description};
-        \node[anchor=west,font=\small] at (3.1,3.4) {color};
-        
-        % Tasks table
-        \draw (6,3) rectangle (8.5,5);
-        \node[anchor=north west] at (6.1,4.9) {\textbf{tasks}};
-        \node[anchor=west,font=\small] at (6.1,4.6) {id (PK)};
-        \node[anchor=west,font=\small] at (6.1,4.3) {user\_id (FK)};
-        \node[anchor=west,font=\small] at (6.1,4.0) {group\_id (FK)};
-        \node[anchor=west,font=\small] at (6.1,3.7) {title};
-        \node[anchor=west,font=\small] at (6.1,3.4) {completed};
-        
-        % Relationships
-        \draw[->] (2,4) -- (3,4);
-        \node at (2.5,4.2) {1:N};
-        
-        \draw[->] (5,4) -- (6,4);
-        \node at (5.5,4.2) {1:N};
-        
-    \end{tikzpicture}
-    \caption{Diagramma ER - Relazioni Database}
-\end{figure}
-
-\section{Indexing e Query Optimization}
-
-Per ottimizzare le query frequenti:
-
-\begin{itemize}
-    \item \textbf{Indice su user\_id}: Query task di un utente ($O(log n)$ anziché $O(n)$)
-    \item \textbf{Indice su group\_id}: Filtraggio task per gruppo
-    \item \textbf{Indice composto (user\_id, completed)}: Query task pendenti per utente
-    \item \textbf{TTL Index}: Auto-eliminazione task scaduti (es. dopo 30 giorni completamento)
-\end{itemize}
-
-\newpage
-
-% ==================== CAPITOLO 7 ====================
-\chapter{Cloud Storage e Persistenza}
-
-\section{Cloud Storage Strategy}
-
-Per la persistenza dei dati e backup utilizziamo servizi cloud:
-
-\subsection{Opzione 1: AWS S3}
-
-\begin{itemize}
-    \item Bucket per backup database (MongoDB dump giornaliero)
-    \item Bucket per file allegati (documenti, esportazioni PDF)
-    \item Lifecycle policy: sposta in Glacier dopo 90 giorni (costi ridotti)
-\end{itemize}
-
-\begin{lstlisting}
-// services/cloudStorageService.js
-const AWS = require('aws-sdk');
-
-const s3 = new AWS.S3({
-  accessKeyId: process.env.AWS_ACCESS_KEY,
-  secretAccessKey: process.env.AWS_SECRET_KEY,
-  region: process.env.AWS_REGION,
-});
-
-exports.uploadFile = async (file, key) => {
-  const params = {
-    Bucket: 'study-planner-bucket',
-    Key: `uploads/${key}`,
-    Body: file.buffer,
-    ContentType: file.mimetype,
-    ServerSideEncryption: 'AES256',
-  };
-  
-  return s3.upload(params).promise();
-};
-
-exports.backupDatabase = async (mongodbDump) => {
-  const timestamp = new Date().toISOString();
-  const key = `backups/mongodb-${timestamp}.archive`;
-  
-  return s3.upload({
-    Bucket: 'study-planner-bucket',
-    Key: key,
-    Body: mongodbDump,
-    StorageClass: 'STANDARD_IA', // Reduced Redundancy per backup
-  }).promise();
-};
-\end{lstlisting}
-
-\subsection{Opzione 2: Firebase Storage}
-
-Alternative più semplice con servizio di backend Firebase:
-
-\begin{lstlisting}
-// services/firebaseService.js
-const admin = require('firebase-admin');
-
-admin.initializeApp({
-  credential: admin.credential.cert(
-    require('../firebase-credentials.json')
-  ),
-});
-
-const bucket = admin.storage().bucket();
-
-exports.uploadTaskAnalytics = async (userId, data) => {
-  const file = bucket.file(`analytics/${userId}/data.json`);
-  
-  return file.save(JSON.stringify(data), {
-    metadata: {
-      contentType: 'application/json',
-      metadata: {
-        userId,
-        uploadedAt: new Date().toISOString(),
-      }
-    }
-  });
-};
-\end{lstlisting}
-
-\section{Backup Strategy}
-
-\begin{table}[H]
-    \centering
-    \begin{tabular}{|l|c|c|p{5cm}|}
-        \hline
-        \textbf{Tipo} & \textbf{Frequenza} & \textbf{Retention} & \textbf{Storage} \\
-        \hline
-        Full Database & Giornaliero (23:00) & 30 giorni & AWS S3 \\
-        \hline
-        Incremental & Ogni 6 ore & 7 giorni & S3 \\
-        \hline
-        User Export & On-demand & 90 giorni & S3 \\
-        \hline
-        Disaster Recovery & Settimanale & 12 mesi & S3 Glacier \\
-        \hline
-    \end{tabular}
-\end{table}
-
-\section{Sicurezza Cloud}
-
-\begin{itemize}
-    \item \textbf{Encryption at Rest}: AES-256 per S3, encryption nativa Firebase
-    \item \textbf{Encryption in Transit}: HTTPS/TLS 1.3 per upload/download
-    \item \textbf{Access Control}: IAM policies, bucket policies ristrittive
-    \item \textbf{Versioning}: Abilitato per recovery da eliminazioni accidentali
-    \item \textbf{Audit Logging}: CloudTrail per tracking accessi e modifiche
-\end{itemize}
-
-\newpage
-
-% ==================== CAPITOLO 8 ====================
-\chapter{Autenticazione e Sicurezza}
-
-\section{JWT Token Based Authentication}
-
-L'autenticazione utilizza JSON Web Token (JWT) per statelessness e scalabilità:
-
-\begin{lstlisting}
-// middleware/authentication.js
-const jwt = require('jsonwebtoken');
-
-exports.authenticateToken = (req, res, next) => {
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1]; // Bearer <token>
-  
-  if (!token) {
-    return res.status(401).json({ error: 'Token mancante' });
-  }
-  
-  jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
-    if (err) {
-      return res.status(403).json({ error: 'Token non valido' });
-    }
-    req.user = user;
-    next();
-  });
-};
-
-// controllers/authController.js
-exports.login = async (req, res) => {
-  try {
-    const { email, password } = req.body;
-    
-    // Verifica credenziali
-    const user = await User.findOne({ email });
-    if (!user) {
-      return res.status(401).json({ error: 'Credenziali invalide' });
-    }
-    
-    const passwordMatch = await bcrypt.compare(password, user.passwordHash);
-    if (!passwordMatch) {
-      return res.status(401).json({ error: 'Credenziali invalide' });
-    }
-    
-    // Genera JWT
-    const token = jwt.sign(
-      { id: user._id, email: user.email },
-      process.env.JWT_SECRET,
-      { expiresIn: '7d' }
-    );
-    
-    const refreshToken = jwt.sign(
-      { id: user._id },
-      process.env.JWT_REFRESH_SECRET,
-      { expiresIn: '30d' }
-    );
-    
-    res.json({
-      token,
-      refreshToken,
-      user: { id: user._id, email: user.email, name: user.name }
-    });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-};
-\end{lstlisting}
-
-\section{Best Practices Sicurezza}
+Quando l'utente crea un task, il percorso logico e`:
 
 \begin{enumerate}
-    \item \textbf{Password Hashing}: bcrypt con salt rounds = 10
-    \item \textbf{CORS}: Configurare origins authorized per frontend
-    \item \textbf{Rate Limiting}: Max 5 failed login attempts / 15 min
-    \item \textbf{Input Validation}: Validazione schema con Joi
-    \item \textbf{SQL Injection Prevention}: Prepared statements (Mongoose)
-    \item \textbf{XSS Prevention}: Sanitizzazione input, Content Security Policy headers
-    \item \textbf{HTTPS/TLS}: Certificati SSL/TLS per produzione (Let's Encrypt)
+  \item il componente di dashboard invia i dati allo store;
+  \item \texttt{taskService.createTask()} completa i campi tecnici mancanti;
+  \item il servizio Firestore salva il documento remoto e incrementa la revisione del workspace;
+  \item lo store aggiorna lo stato locale;
+  \item \texttt{syncLocalBackup()} allinea anche il backup in \texttt{localStorage}.
 \end{enumerate}
 
-\begin{lstlisting}
-// middleware/validation.js
-const Joi = require('joi');
+Un meccanismo analogo viene applicato per update, delete e toggle del completamento. Il vantaggio e` che l'app mantiene tre livelli coerenti: UI React, cache locale del browser e stato persistito su Firestore.
 
-exports.validateTaskCreation = (req, res, next) => {
-  const schema = Joi.object({
-    title: Joi.string().required().max(255),
-    description: Joi.string().max(1000),
-    groupId: Joi.string().required(),
-    dueDate: Joi.date().iso().greater('now'),
-  });
-  
-  const { error, value } = schema.validate(req.body);
-  if (error) {
-    return res.status(400).json({ 
-      error: error.details[0].message 
-    });
-  }
-  
-  req.validatedData = value;
-  next();
-};
+\subsection{Gestione dei gruppi}
 
-// server.js - Security headers
-app.use((req, res, next) => {
-  res.setHeader('X-Content-Type-Options', 'nosniff');
-  res.setHeader('X-Frame-Options', 'DENY');
-  res.setHeader('X-XSS-Protection', '1; mode=block');
-  res.setHeader('Strict-Transport-Security', 'max-age=31536000');
-  next();
-});
-\end{lstlisting}
-
-\newpage
-
-% ==================== CAPITOLO 9 ====================
-\chapter{Performance e Scalabilità}
-
-\section{Ottimizzazioni Frontend}
-
-\subsection{Code Splitting}
-
-\begin{lstlisting}
-// App.jsx
-import { lazy, Suspense } from 'react';
-import Dashboard from './pages/Dashboard';
-
-const Analytics = lazy(() => import('./pages/Analytics'));
-const Settings = lazy(() => import('./pages/Settings'));
-
-export default function App() {
-  return (
-    <Suspense fallback={<LoadingSpinner />}>
-      <Router>
-        <Routes>
-          <Route path="/" element={<Dashboard />} />
-          <Route path="/analytics" element={<Analytics />} />
-          <Route path="/settings" element={<Settings />} />
-        </Routes>
-      </Router>
-    </Suspense>
-  );
-}
-\end{lstlisting}
-
-\subsection{Build Optimization}
-
-Configurazione Vite per minimizzazione:
-
-\begin{lstlisting}
-// vite.config.js
-import react from '@vitejs/plugin-react';
-import { defineConfig } from 'vite';
-
-export default defineConfig({
-  plugins: [react()],
-  build: {
-    minify: 'terser',
-    terserOptions: {
-      compress: { drop_console: true },
-    },
-    rollupOptions: {
-      output: {
-        manualChunks: {
-          vendor: ['react', 'react-dom', 'zustand'],
-          charts: ['chart.js'],
-        },
-      },
-    },
-  },
-});
-\end{lstlisting}
-
-\section{Ottimizzazioni Backend}
-
-\subsection{Caching con Redis}
-
-\begin{lstlisting}
-// services/redisService.js
-const redis = require('redis');
-
-const client = redis.createClient({
-  host: process.env.REDIS_HOST || 'localhost',
-  port: process.env.REDIS_PORT || 6379,
-  db: 0,
-});
-
-exports.get = (key) => 
-  new Promise((resolve, reject) => {
-    client.get(key, (err, data) => {
-      if (err) reject(err);
-      resolve(data);
-    });
-  });
-
-exports.setex = (key, ttl, value) => 
-  new Promise((resolve, reject) => {
-    client.setex(key, ttl, value, (err) => {
-      if (err) reject(err);
-      resolve();
-    });
-  });
-
-// Uso nei controller
-const tasks = await redisService.get(`tasks:${userId}`);
-if (!tasks) {
-  const dbTasks = await Task.find({ userId });
-  await redisService.setex(`tasks:${userId}`, 300, 
-    JSON.stringify(dbTasks));
-}
-\end{lstlisting}
-
-\subsection{Load Balancing}
-
-Per scalabilità orizzontale, deployare multiple istanze backend:
-
-\begin{lstlisting}[language=bash]
-# Nginx reverse proxy
-upstream backend {
-  server localhost:5000;
-  server localhost:5001;
-  server localhost:5002;
-}
-
-server {
-  listen 80;
-  server_name api.studyplanner.com;
-  
-  location / {
-    proxy_pass http://backend;
-    proxy_set_header Host $host;
-    proxy_set_header X-Real-IP $remote_addr;
-    proxy_buffering off; # Important for WebSocket
-  }
-}
-\end{lstlisting}
-
-\section{Metriche di Performance Target}
-
-\begin{table}[H]
-    \centering
-    \begin{tabular}{|l|c|c|}
-        \hline
-        \textbf{Metrica} & \textbf{Target} & \textbf{Misura} \\
-        \hline
-        Largest Contentful Paint (LCP) & $\leq 2.5s$ & Performance \\
-        \hline
-        First Input Delay (FID) & $\leq 100ms$ & Responsività \\
-        \hline
-        Cumulative Layout Shift (CLS) & $\leq 0.1$ & Stabilità \\
-        \hline
-        Time to Interactive (TTI) & $\leq 3.5s$ & Usabilità \\
-        \hline
-        API Response Time & $\leq 200ms$ & Server \\
-        \hline
-        WebSocket Latency & $\leq 100ms$ & Real-time \\
-        \hline
-        Database Query & $\leq 50ms$ & Query \\
-        \hline
-    \end{tabular}
-\end{table}
-
-\newpage
-
-% ==================== CAPITOLO 10 ====================
-\chapter{Testing}
-
-\section{Strategie di Testing}
-
-\subsection{Unit Testing}
-
-Testing dei componenti isolati con Jest + React Testing Library:
-
-\begin{lstlisting}
-// __tests__/components/TaskItem.test.jsx
-import { render, screen, fireEvent } from '@testing-library/react';
-import TaskItem from '../../components/Task/TaskItem';
-
-describe('TaskItem Component', () => {
-  const mockTask = {
-    id: '1',
-    title: 'Study Math',
-    completed: false,
-    dueDate: '2026-06-01',
-  };
-  
-  test('renders task title', () => {
-    render(<TaskItem task={mockTask} />);
-    expect(screen.getByText('Study Math')).toBeInTheDocument();
-  });
-  
-  test('calls onComplete when checkbox clicked', () => {
-    const onComplete = jest.fn();
-    render(<TaskItem task={mockTask} onComplete={onComplete} />);
-    
-    fireEvent.click(screen.getByRole('checkbox'));
-    expect(onComplete).toHaveBeenCalledWith(mockTask.id);
-  });
-});
-\end{lstlisting}
-
-\subsection{Integration Testing}
-
-Testing delle API e flussi end-to-end:
-
-\begin{lstlisting}
-// __tests__/api/tasks.test.js
-const request = require('supertest');
-const app = require('../../server');
-
-describe('Tasks API', () => {
-  let authToken;
-  
-  beforeAll(async () => {
-    // Login e ottieni token
-    const response = await request(app)
-      .post('/api/auth/login')
-      .send({ email: 'test@test.com', password: 'password' });
-    authToken = response.body.token;
-  });
-  
-  test('POST /api/tasks creates a task', async () => {
-    const response = await request(app)
-      .post('/api/tasks')
-      .set('Authorization', `Bearer ${authToken}`)
-      .send({
-        title: 'New Task',
-        groupId: 'group1',
-        dueDate: '2026-06-01',
-      });
-    
-    expect(response.status).toBe(201);
-    expect(response.body.title).toBe('New Task');
-  });
-  
-  test('GET /api/tasks returns user tasks', async () => {
-    const response = await request(app)
-      .get('/api/tasks')
-      .set('Authorization', `Bearer ${authToken}`);
-    
-    expect(response.status).toBe(200);
-    expect(Array.isArray(response.body)).toBe(true);
-  });
-});
-\end{lstlisting}
-
-\subsection{E2E Testing}
-
-Testing del flusso completo con Cypress/Playwright:
-
-\begin{lstlisting}
-// cypress/e2e/task-creation.cy.js
-describe('Task Creation Flow', () => {
-  beforeEach(() => {
-    cy.visit('http://localhost:3000');
-    cy.login('user@test.com', 'password');
-  });
-  
-  it('should create and complete a task', () => {
-    // Naviga a dashboard
-    cy.get('[data-testid="create-task-btn"]').click();
-    
-    // Compila form
-    cy.get('[data-testid="task-title"]').type('Study Algorithms');
-    cy.get('[data-testid="task-group"]').select('Computer Science');
-    cy.get('[data-testid="task-submit"]').click();
-    
-    // Verifica task creato
-    cy.get('[data-testid="task-item"]').contains('Study Algorithms')
-      .should('exist');
-    
-    // Completa task
-    cy.get('[data-testid="task-checkbox"]').first().click();
-    
-    // Verifica stato
-    cy.get('[data-testid="task-item"]').first()
-      .should('have.class', 'completed');
-  });
-});
-\end{lstlisting}
-
-\section{Code Coverage}
-
-Target minimo di coverage: $\geq 80\%$ delle linee di codice
-
-\begin{table}[H]
-    \centering
-    \begin{tabular}{|l|c|c|}
-        \hline
-        \textbf{Area} & \textbf{Target} & \textbf{Criticità} \\
-        \hline
-        Components & 85\% & Alta \\
-        \hline
-        Services & 90\% & Alta \\
-        \hline
-        Hooks & 80\% & Media \\
-        \hline
-        Utils & 75\% & Bassa \\
-        \hline
-        Overall & 80\% & Media \\
-        \hline
-    \end{tabular}
-\end{table}
-
-\section{Continuous Integration / Continuous Deployment}
-
-\subsection{GitHub Actions Workflow}
-
-\begin{lstlisting}[language=yaml]
-# .github/workflows/ci-cd.yml
-name: CI/CD Pipeline
-
-on:
-  push:
-    branches: [main, develop]
-  pull_request:
-    branches: [main, develop]
-
-jobs:
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v2
-      
-      - name: Setup Node
-        uses: actions/setup-node@v2
-        with:
-          node-version: '18'
-      
-      - name: Install dependencies
-        run: npm install
-      
-      - name: Run unit tests
-        run: npm run test:unit
-      
-      - name: Run coverage
-        run: npm run test:coverage
-      
-      - name: Run E2E tests
-        run: npm run test:e2e
-  
-  deploy:
-    needs: test
-    if: github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Deploy to production
-        run: npm run deploy
-\end{lstlisting}
-
-\section{TODO - Sezione Testing da Completare}
-
-\textcolor{red}{\textbf{⚠️ SEZIONE IN COSTRUZIONE}}
-
-I seguenti elementi devono essere aggiunti:
-
-\begin{enumerate}
-    \item \textbf{Performance Testing}: Load test con Apache JMeter per stimare throughput massimo
-    \item \textbf{Security Testing}: Penetration testing, OWASP Top 10 checks
-    \item \textbf{Accessibility Testing}: WCAG 2.1 compliance, screen reader testing
-    \item \textbf{Browser Compatibility}: Cross-browser testing matrix
-    \item \textbf{Mobile Testing}: Responsive design testing su vari viewport
-    \item \textbf{API Monitoring}: Monitoring metriche API in produzione (APM)
-    \item \textbf{Error Tracking}: Sentry integration per bug tracking
-    \item \textbf{Disaster Recovery Testing}: RTO/RPO validation
-\end{enumerate}
-
-\newpage
-
-% ==================== CONCLUSIONI ====================
-\chapter{Conclusioni}
-
-\section{Riepilogo Architettura}
-
-L'architettura proposta per Study Planner rappresenta una soluzione moderna e scalabile per un'applicazione di gestione task collaborativa:
+La gestione dei gruppi e` leggermente piu` complessa dei task per la presenza delle milestone. In particolare:
 
 \begin{itemize}
-    \item \textbf{Frontend}: React SPA con state management centralizzato (Zustand)
-    \item \textbf{Backend}: API REST con Node.js + Express e autenticazione JWT
-    \item \textbf{Real-Time}: WebSocket via Socket.io per sincronizzazione istantanea
-    \item \textbf{Persistenza}: Database NoSQL (MongoDB) o SQL (PostgreSQL) con caching Redis
-    \item \textbf{Cloud}: AWS S3 o Firebase per storage e backup
-    \item \textbf{Sicurezza}: Crittografia, autenticazione, validazione input
+  \item la creazione di un gruppo salva sia il documento del gruppo sia la sottocollezione \texttt{milestones};
+  \item l'aggiornamento usa \texttt{syncMilestonesForGroup()} per creare, aggiornare o rimuovere milestone obsolete;
+  \item la cancellazione di un gruppo implica anche la rimozione dei task collegati e delle milestone.
 \end{itemize}
 
-\section{Vantaggi della Soluzione}
+Il flusso di delete e` quindi composto da piu` operazioni coordinate, e lo store si occupa di mantenere consistente il gruppo selezionato nella UI dopo la rimozione.
+
+\subsection{Reimport manuale}
+
+L'app espone anche una funzione di reimport manuale dalla schermata impostazioni. Questo flusso e` utile per riallineare vecchi dati locali con Firestore. Un vincolo importante e` la protezione contro account diversi: se il backup locale risulta associato a un altro \texttt{uid}, il reimport viene bloccato esplicitamente.
+
+\section{Aspetti di coerenza, prestazioni e limiti}
+
+La soluzione adottata presenta diversi punti di forza:
 
 \begin{itemize}
-    \item \textbf{Separazione Concerns}: Frontend/Backend completamente disaccoppiati
-    \item \textbf{Scalabilità Orizzontale}: Possibilità di aggiungere istanze server
-    \item \textbf{Real-Time}: Sincronizzazione instantanea tra client
-    \item \textbf{Persistenza Robusta}: Backup automatico e disaster recovery
-    \item \textbf{Sicurezza}: Autenticazione centralizzata e crittografia dati
-    \item \textbf{Performance}: Caching, code splitting, database indexing
+  \item autenticazione delegata a un provider affidabile;
+  \item isolamento dei dati tramite regole Firestore per utente;
+  \item uso di batch write per operazioni atomiche;
+  \item cache locale utile per velocizzare il bootstrap;
+  \item separazione abbastanza chiara tra UI, store, servizi di dominio e persistenza.
 \end{itemize}
 
-\section{Implementazione Next Steps}
-
-\begin{enumerate}
-    \item \textbf{Setup Backend}: Creare struttura Node.js + Express
-    \item \textbf{Implementare API CRUD}: Endpoints per task, groups, users
-    \item \textbf{Integrazione WebSocket}: Socket.io per real-time
-    \item \textbf{Authentication}: Login/register con JWT
-    \item \textbf{Cloud Setup}: Configurare AWS S3 o Firebase
-    \item \textbf{Testing}: Unit, integration, E2E tests
-    \item \textbf{Deployment}: Docker containers, CI/CD pipeline
-    \item \textbf{Monitoring}: APM, error tracking, analytics
-\end{enumerate}
-
-\section{Future Improvements}
-
-\subsection{Breve Termine}
+Esistono tuttavia anche alcuni limiti strutturali:
 
 \begin{itemize}
-    \item Implementare WebSocket per timer collaborativi
-    \item Aggiungere notifiche push (browser e mobile)
-    \item Analytics avanzate con machine learning
-    \item Integrazione calendario (Google Calendar, Outlook)
+  \item il caricamento dati usa letture esplicite, non listener realtime Firestore;
+  \item l'assenza di backend custom rende piu` difficile centralizzare logica avanzata, auditing o elaborazioni server-side;
+  \item alcune operazioni complesse, come la cancellazione coordinata di gruppo e task, rimangono gestite interamente nel client;
+  \item la sincronizzazione multi-dispositivo si basa sul refresh e sulla persistenza, non su push continuo verso la UI.
 \end{itemize}
 
-\subsection{Medio Termine}
+Dal punto di vista di un corso di reti di calcolatori, l'app rappresenta quindi un buon esempio di architettura cloud \emph{serverless client-driven}: semplice da distribuire, ma meno controllabile di una soluzione con backend applicativo dedicato.
 
-\begin{itemize}
-    \item Mobile app native (React Native)
-    \item Offline support con service workers
-    \item Collaborative editing in real-time (CRDT)
-    \item Integration con AI per task suggestions
-\end{itemize}
+\section{Conclusione}
 
-\subsection{Lungo Termine}
+La parte di rete di Focusly e` costruita attorno a una comunicazione diretta tra frontend React e servizi Firebase. Firebase Authentication gestisce l'identita` dell'utente, mentre Firestore conserva in cloud l'intero workspace personale. Lo store Zustand svolge il ruolo di coordinatore della business logic, orchestrando bootstrap, migrazione, CRUD, sincronizzazione locale e aggiornamento della UI.
 
-\begin{itemize}
-    \item Microservices architecture
-    \item Kubernetes orchestration
-    \item GraphQL API alternative
-    \item Multi-tenant SaaS offering
-\end{itemize}
-
-\newpage
-
-\appendix
-
-\chapter{Setup e Installazione}
-
-\section{Prerequisiti}
-
-\begin{itemize}
-    \item Node.js $\geq$ 18.0.0
-    \item npm $\geq$ 9.0.0 (o yarn)
-    \item MongoDB $\geq$ 5.0 (per dev) o PostgreSQL $\geq$ 14
-    \item Redis (per caching)
-\end{itemize}
-
-\section{Setup Frontend}
-
-\begin{lstlisting}[language=bash]
-cd frontend
-npm install
-
-# Development server
-npm run dev
-
-# Build production
-npm run build
-
-# Preview build
-npm run preview
-\end{lstlisting}
-
-\section{Setup Backend}
-
-\begin{lstlisting}[language=bash]
-cd backend
-npm install
-
-# Configurare .env
-cat > .env << EOF
-PORT=5000
-NODE_ENV=development
-JWT_SECRET=your_secret_key_here
-MONGODB_URI=mongodb://localhost:27017/study-planner
-REDIS_HOST=localhost
-REDIS_PORT=6379
-AWS_ACCESS_KEY=your_aws_key
-AWS_SECRET_KEY=your_aws_secret
-CORS_ORIGIN=http://localhost:3000
-EOF
-
-# Start server
-npm run dev
-\end{lstlisting}
-
-\section{Environment Configuration}
-
-File `.env` required:
-
-\begin{table}[H]
-    \centering
-    \begin{tabular}{|l|l|c|}
-        \hline
-        \textbf{Variabile} & \textbf{Descrizione} & \textbf{Tipo} \\
-        \hline
-        NODE\_ENV & production/development & string \\
-        \hline
-        PORT & Server port & number \\
-        \hline
-        JWT\_SECRET & Secret per JWT signing & string \\
-        \hline
-        MONGODB\_URI & MongoDB connection string & string \\
-        \hline
-        REDIS\_HOST & Redis server host & string \\
-        \hline
-        AWS\_REGION & AWS region & string \\
-        \hline
-    \end{tabular}
-\end{table}
-
-\chapter{Comandi Utili}
-
-\section{Development}
-
-\begin{lstlisting}[language=bash]
-# Frontend dev server con HMR
-npm run dev
-
-# Backend dev server con nodemon
-npm run dev:backend
-
-# Run all tests
-npm run test
-
-# Run tests with coverage
-npm run test:coverage
-
-# Lint code
-npm run lint
-
-# Format code
-npm run format
-\end{lstlisting}
-
-\section{Database}
-
-\begin{lstlisting}[language=bash]
-# Backup MongoDB
-mongodump --uri mongodb://localhost:27017/study-planner \
-  --out ./backups/$(date +%Y%m%d)
-
-# Restore MongoDB
-mongorestore --uri mongodb://localhost:27017/study-planner \
-  ./backups/20260520/
-
-# Run migrations
-npm run db:migrate
-
-# Seed test data
-npm run db:seed
-\end{lstlisting}
-
-\chapter{Glossario}
-
-\begin{table}[H]
-    \centering
-    \begin{tabular}{|l|p{9cm}|}
-        \hline
-        \textbf{Termine} & \textbf{Definizione} \\
-        \hline
-        CRUD & Create, Read, Update, Delete - operazioni base su dati \\
-        \hline
-        JWT & JSON Web Token - token di autenticazione stateless \\
-        \hline
-        REST & Representational State Transfer - architettura API web \\
-        \hline
-        WebSocket & Protocollo comunicazione bidirezionale real-time \\
-        \hline
-        SPA & Single Page Application - app che carica una sola pagina HTML \\
-        \hline
-        NoSQL & Database non relazionale (es. MongoDB) \\
-        \hline
-        ORM & Object-Relational Mapping - astrazione database layer \\
-        \hline
-        TTL & Time To Live - durata di validità di un'entry cache \\
-        \hline
-    \end{tabular}
-\end{table}
+In sintesi, l'app non implementa una rete complessa con piu` nodi applicativi proprietari, ma una soluzione moderna basata su servizi cloud gestiti. Il risultato e` un'architettura pulita e adatta a una prima versione del prodotto, nella quale l'aspetto piu` interessante non e` la presenza di un backend tradizionale, bensi` il modo in cui il client organizza autenticazione, persistenza remota e consistenza dei dati tra browser e cloud.
 
 \end{document}

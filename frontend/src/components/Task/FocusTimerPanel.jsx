@@ -63,6 +63,8 @@ const readStoredPosition = () => {
   return null;
 };
 
+const isFocusActionTarget = (target) => target instanceof Element && Boolean(target.closest('[data-focus-action="true"]'));
+
 function FocusTimerPanel({
   activeTask,
   activeGroupName,
@@ -128,6 +130,10 @@ function FocusTimerPanel({
 
   const handlePointerDown = (event) => {
     if (event.button !== 0) {
+      return;
+    }
+
+    if (isFocusActionTarget(event.target)) {
       return;
     }
 
@@ -197,7 +203,7 @@ function FocusTimerPanel({
       return;
     }
 
-    if (event.target.closest('[data-focus-action="true"]')) {
+    if (isFocusActionTarget(event.target)) {
       return;
     }
 
@@ -221,7 +227,7 @@ function FocusTimerPanel({
     ? { left: `${position.x}px`, top: `${position.y}px` }
     : undefined;
 
-  const timerLabel = activeTask ? (activeGroupName || 'Focus Timer') : 'Focus Timer';
+  const timerLabel = 'Focus Timer';
   const showBackdrop = isRunning && isExpanded;
   const accentStyle = activeTask && activeGroupColor ? getGroupAccentStyle(activeGroupColor) : undefined;
 
@@ -254,7 +260,10 @@ function FocusTimerPanel({
           >
             <div className="floating-focus-timer__chrome">
               <div className="floating-focus-timer__handle">
-                <span className="floating-focus-timer__status-dot" aria-hidden="true" />
+                <span
+                  className={`floating-focus-timer__status-dot ${isRunning && activeTask ? 'floating-focus-timer__status-dot--active' : ''}`.trim()}
+                  aria-hidden="true"
+                />
                 <div className="floating-focus-timer__meta">
                   <span className="floating-focus-timer__eyebrow">{timerLabel}</span>
                 </div>
@@ -263,7 +272,6 @@ function FocusTimerPanel({
 
             {!isExpanded ? (
               <div className="floating-focus-timer__compact-content">
-                <span className="floating-focus-timer__compact-status">{timerLabel}</span>
                 <strong>{activeTimerLabel}</strong>
               </div>
             ) : null}
@@ -271,12 +279,11 @@ function FocusTimerPanel({
 
           {isExpanded ? (
             <div className={`focus-timer-card ${activeTask ? '' : 'focus-timer-card--idle'}`.trim()}>
-              <div className="focus-timer-card__header">
-                <span className="focus-timer-card__label">{activeTask ? 'Current Session' : 'Ready to Focus'}</span>
-                {activeTask ? (
+              {activeTask ? (
+                <div className="focus-timer-card__header">
                   <span className="focus-timer-card__planned">{activeTask.timer} min plan</span>
-                ) : null}
-              </div>
+                </div>
+              ) : null}
 
               <h4 className="focus-timer-card__title">{activeTask?.title || 'Pick a task and start the timer'}</h4>
 
@@ -292,7 +299,10 @@ function FocusTimerPanel({
                 <Button
                   variant={isRunning ? 'ghost' : 'primary'}
                   className="floating-focus-timer__action floating-focus-timer__action--primary"
-                  onClick={handlePrimaryAction}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    handlePrimaryAction();
+                  }}
                   disabled={!activeTask}
                   data-focus-action="true"
                 >
@@ -303,7 +313,13 @@ function FocusTimerPanel({
                 <Button
                   variant="ghost"
                   className="floating-focus-timer__action"
-                  onClick={() => activeTask && onResetTimer(activeTask)}
+                  onClick={(event) => {
+                    event.stopPropagation();
+
+                    if (activeTask) {
+                      onResetTimer(activeTask);
+                    }
+                  }}
                   disabled={!activeTask}
                   data-focus-action="true"
                 >

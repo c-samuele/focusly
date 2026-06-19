@@ -1,9 +1,11 @@
 // Servizio per le metriche di studio.
 // Produce dati aggregati per card e grafici senza dipendere dai componenti UI.
 const getDateValue = (value) => {
-  const date = new Date(value);
+  const date = value instanceof Date ? new Date(value) : new Date(value);
   return Number.isNaN(date.getTime()) ? null : date;
 };
+
+const normalizeReferenceDate = (value) => getDateValue(value) ?? new Date();
 
 const formatDayLabel = (date) =>
   date.toLocaleDateString('en-US', {
@@ -17,72 +19,124 @@ const formatMonthLabel = (date) =>
     year: '2-digit',
   });
 
-const getCurrentPeriodBounds = (period) => {
-  const now = new Date();
-  const start = new Date(now);
-  const end = new Date(now);
+const formatLongDayLabel = (date) =>
+  date.toLocaleDateString('en-US', {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
 
-  // Ogni periodo definisce l'intervallo corrente su cui filtrare i completamenti.
-  if (period === 'day') {
-    start.setHours(0, 0, 0, 0);
-    end.setHours(23, 59, 59, 999);
-    return { start, end };
+const formatWeekRangeLabel = (start, end) => {
+  const sameYear = start.getFullYear() === end.getFullYear();
+  const sameMonth = sameYear && start.getMonth() === end.getMonth();
+
+  if (sameMonth) {
+    return `${start.toLocaleDateString('en-US', { month: 'short' })} ${start.getDate()} - ${end.getDate()}, ${end.getFullYear()}`;
   }
 
-  if (period === 'week') {
-    const day = start.getDay();
-    const offset = day === 0 ? 6 : day - 1;
-    start.setDate(start.getDate() - offset);
-    start.setHours(0, 0, 0, 0);
-    end.setHours(23, 59, 59, 999);
-    return { start, end };
+  if (sameYear) {
+    return `${start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - ${end.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}, ${end.getFullYear()}`;
   }
 
-  if (period === 'month') {
-    start.setDate(1);
-    start.setHours(0, 0, 0, 0);
-    end.setHours(23, 59, 59, 999);
-    return { start, end };
-  }
+  return `${start.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} - ${end.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
+};
 
-  start.setMonth(0, 1);
+const getDayBounds = (referenceDate) => {
+  const start = new Date(referenceDate);
   start.setHours(0, 0, 0, 0);
+
+  const end = new Date(referenceDate);
   end.setHours(23, 59, 59, 999);
+
   return { start, end };
 };
 
-const getCurrentPeriodLabel = (period) => {
-  if (period === 'day') {
-    return 'Today';
-  }
+const getWeekBounds = (referenceDate) => {
+  const start = new Date(referenceDate);
+  const day = start.getDay();
+  const offset = day === 0 ? 6 : day - 1;
+  start.setDate(start.getDate() - offset);
+  start.setHours(0, 0, 0, 0);
 
-  if (period === 'week') {
-    return 'This Week';
-  }
+  const end = new Date(start);
+  end.setDate(start.getDate() + 6);
+  end.setHours(23, 59, 59, 999);
 
-  if (period === 'month') {
-    return 'This Month';
-  }
-
-  return 'This Year';
+  return { start, end };
 };
 
-const getHistoryPeriodBounds = (period) => {
-  const bounds = getCurrentPeriodBounds(period);
+const getMonthBounds = (referenceDate) => {
+  const start = new Date(referenceDate.getFullYear(), referenceDate.getMonth(), 1);
+  start.setHours(0, 0, 0, 0);
+
+  const end = new Date(referenceDate.getFullYear(), referenceDate.getMonth() + 1, 0);
+  end.setHours(23, 59, 59, 999);
+
+  return { start, end };
+};
+
+const getYearBounds = (referenceDate) => {
+  const start = new Date(referenceDate.getFullYear(), 0, 1);
+  start.setHours(0, 0, 0, 0);
+
+  const end = new Date(referenceDate.getFullYear(), 11, 31);
+  end.setHours(23, 59, 59, 999);
+
+  return { start, end };
+};
+
+const getCurrentPeriodBounds = (period, referenceDate = new Date()) => {
+  const reference = normalizeReferenceDate(referenceDate);
 
   if (period === 'day') {
-    return { ...bounds, unit: 'day', title: 'History: Today', axisLabel: 'Days' };
+    return getDayBounds(reference);
   }
 
   if (period === 'week') {
-    return { ...bounds, unit: 'day', title: 'History: Current Week', axisLabel: 'Days' };
+    return getWeekBounds(reference);
   }
 
   if (period === 'month') {
-    return { ...bounds, unit: 'day', title: 'History: Current Month', axisLabel: 'Days' };
+    return getMonthBounds(reference);
   }
 
-  return { ...bounds, unit: 'month', title: 'History: Current Year', axisLabel: 'Months' };
+  return getYearBounds(reference);
+};
+
+const getPeriodLabel = (period, bounds) => {
+  if (period === 'day') {
+    return formatLongDayLabel(bounds.start);
+  }
+
+  if (period === 'week') {
+    return formatWeekRangeLabel(bounds.start, bounds.end);
+  }
+
+  if (period === 'month') {
+    return bounds.start.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+  }
+
+  return String(bounds.start.getFullYear());
+};
+
+const getHistoryPeriodBounds = (period, referenceDate = new Date()) => {
+  const bounds = getCurrentPeriodBounds(period, referenceDate);
+  const label = getPeriodLabel(period, bounds);
+
+  if (period === 'day') {
+    return { ...bounds, unit: 'day', title: `History: ${label}`, axisLabel: 'Hours of day' };
+  }
+
+  if (period === 'week') {
+    return { ...bounds, unit: 'day', title: `History: ${label}`, axisLabel: 'Days' };
+  }
+
+  if (period === 'month') {
+    return { ...bounds, unit: 'day', title: `History: ${label}`, axisLabel: 'Days' };
+  }
+
+  return { ...bounds, unit: 'month', title: `History: ${label}`, axisLabel: 'Months' };
 };
 
 const isWithinBounds = (value, bounds) => {
@@ -95,8 +149,46 @@ const isWithinBounds = (value, bounds) => {
   return date >= bounds.start && date <= bounds.end;
 };
 
-const buildStudyStats = ({ tasks, groups, period }) => {
-  const bounds = getCurrentPeriodBounds(period);
+const isCurrentPeriod = (period, referenceDate = new Date(), now = new Date()) => {
+  const targetBounds = getCurrentPeriodBounds(period, referenceDate);
+  const currentBounds = getCurrentPeriodBounds(period, now);
+
+  return targetBounds.start.getTime() === currentBounds.start.getTime();
+};
+
+const shiftPeriodReferenceDate = (period, referenceDate = new Date(), direction = 0) => {
+  const reference = normalizeReferenceDate(referenceDate);
+  const nextReference = new Date(reference);
+  const delta = direction >= 0 ? 1 : -1;
+
+  if (period === 'day') {
+    nextReference.setDate(nextReference.getDate() + delta);
+    return nextReference;
+  }
+
+  if (period === 'week') {
+    nextReference.setDate(nextReference.getDate() + (7 * delta));
+    return nextReference;
+  }
+
+  if (period === 'month') {
+    nextReference.setMonth(nextReference.getMonth() + delta);
+    return nextReference;
+  }
+
+  nextReference.setFullYear(nextReference.getFullYear() + delta);
+  return nextReference;
+};
+
+const canShiftPeriodForward = (period, referenceDate = new Date(), now = new Date()) => {
+  const targetBounds = getCurrentPeriodBounds(period, referenceDate);
+  const currentBounds = getCurrentPeriodBounds(period, now);
+
+  return targetBounds.start.getTime() < currentBounds.start.getTime();
+};
+
+const buildStudyStats = ({ tasks, groups, period, referenceDate = new Date() }) => {
+  const bounds = getCurrentPeriodBounds(period, referenceDate);
   const plannedTasks = tasks.filter((task) => task.scheduledDate && isWithinBounds(task.scheduledDate, bounds));
   const completedTasks = tasks.filter(
     (task) => task.completed && task.completedAt && isWithinBounds(task.completedAt, bounds)
@@ -129,7 +221,8 @@ const buildStudyStats = ({ tasks, groups, period }) => {
 
   return {
     period,
-    periodLabel: getCurrentPeriodLabel(period),
+    periodLabel: getPeriodLabel(period, bounds),
+    isCurrentPeriod: isCurrentPeriod(period, referenceDate),
     totalPlannedMinutes,
     totalPlannedHours: totalPlannedMinutes / 60,
     totalMinutes,
@@ -166,8 +259,8 @@ const createMonthlyBuckets = (start, end) => {
   return buckets;
 };
 
-const buildHistoryStats = ({ tasks, period }) => {
-  const bounds = getHistoryPeriodBounds(period);
+const buildHistoryStats = ({ tasks, period, referenceDate = new Date() }) => {
+  const bounds = getHistoryPeriodBounds(period, referenceDate);
   const completedTasks = tasks.filter(
     (task) => task.completed && task.completedAt && isWithinBounds(task.completedAt, bounds)
   );
@@ -218,6 +311,9 @@ const buildHistoryStats = ({ tasks, period }) => {
 export const analyticsService = {
   buildStudyStats,
   buildHistoryStats,
+  canShiftPeriodForward,
   getCurrentPeriodBounds,
+  isCurrentPeriod,
   isWithinBounds,
+  shiftPeriodReferenceDate,
 };

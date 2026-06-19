@@ -42,6 +42,9 @@ function StudyChart({
   isRunning,
   onStartTimer,
   onPauseTimer,
+  onShiftBackward,
+  onShiftForward,
+  canShiftForward,
   showBreakdown = true,
 }) {
   const isDayView = period === 'day';
@@ -61,6 +64,34 @@ function StudyChart({
             </Button>
           ))}
         </div>
+
+        <div className="analytics__period-nav" aria-label="Period navigation">
+          <Button
+            variant="ghost"
+            className="analytics__nav-button icon-button"
+            onClick={onShiftBackward}
+            aria-label="View previous period"
+            title="View previous period"
+          >
+            <i className="bi bi-chevron-left" aria-hidden="true" />
+          </Button>
+
+          <div className="analytics__period-label">
+            <span>{stats.isCurrentPeriod ? 'Current selection' : 'Selected period'}</span>
+            <strong>{stats.periodLabel}</strong>
+          </div>
+
+          <Button
+            variant="ghost"
+            className="analytics__nav-button icon-button"
+            onClick={onShiftForward}
+            disabled={!canShiftForward}
+            aria-label="View next period"
+            title={canShiftForward ? 'View next period' : 'Already on the latest available period'}
+          >
+            <i className="bi bi-chevron-right" aria-hidden="true" />
+          </Button>
+        </div>
       </div>
 
       <div className="analytics__body">
@@ -69,7 +100,7 @@ function StudyChart({
             <div className="analytics-card__today-header">
               <div>
                 <span>{stats.periodLabel}</span>
-                <p className="analytics-card__meta">{period === 'day' ? 'Open tasks scheduled for today.' : 'Open tasks still planned in this period.'}</p>
+                <p className="analytics-card__meta">{period === 'day' ? 'Open tasks scheduled for this day.' : 'Open tasks still planned in this period.'}</p>
               </div>
               <strong className="analytics-card__today-count">{periodTasks.length}</strong>
             </div>
@@ -142,7 +173,7 @@ function StudyChart({
           <div className="analytics-card analytics-card--metric">
             <span>Completed tasks</span>
             <strong>{stats.totalCompletedTasks}</strong>
-            <p className="analytics-card__meta">Finished in {stats.periodLabel.toLowerCase()}.</p>
+            <p className="analytics-card__meta">Finished during {stats.periodLabel}.</p>
           </div>
           <div className="analytics-card analytics-card--metric">
             <span>Open tasks</span>

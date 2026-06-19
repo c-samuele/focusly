@@ -11,6 +11,9 @@ function AnalyticsZone({
   isRunning,
   onStartTimer,
   onPauseTimer,
+  onShiftBackward,
+  onShiftForward,
+  canShiftForward,
 }) {
   return (
     <section className="analytics-zone">
@@ -25,6 +28,9 @@ function AnalyticsZone({
         isRunning={isRunning}
         onStartTimer={onStartTimer}
         onPauseTimer={onPauseTimer}
+        onShiftBackward={onShiftBackward}
+        onShiftForward={onShiftForward}
+        canShiftForward={canShiftForward}
         showBreakdown
       />
     </section>
