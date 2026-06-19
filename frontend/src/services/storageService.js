@@ -9,6 +9,7 @@ const DEFAULT_GROUP_ID = 'group-inbox';
 
 const createEmptyData = () => ({
   version: 1,
+  workspaceRevision: 0,
   tasks: [],
   groups: [],
 });
@@ -34,6 +35,9 @@ const readLegacyCollections = () => {
 };
 
 const normalizeDataShape = (data) => {
+  const workspaceRevision = Number.isFinite(Number(data.workspaceRevision))
+    ? Number(data.workspaceRevision)
+    : 0;
   const tasks = Array.isArray(data.tasks) ? data.tasks : [];
   const groups = Array.isArray(data.groups) ? data.groups : [];
   const orphanTasks = tasks.filter((task) => !task.groupId);
@@ -43,6 +47,7 @@ const normalizeDataShape = (data) => {
   if (!orphanTasks.length) {
     return {
       version: 1,
+      workspaceRevision,
       tasks,
       groups,
     };
@@ -71,6 +76,7 @@ const normalizeDataShape = (data) => {
 
   return {
     version: 1,
+    workspaceRevision,
     tasks: nextTasks,
     groups: nextGroups,
   };

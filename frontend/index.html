@@ -3,7 +3,34 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Study Planner</title>
+    <meta name="description" content="Focusly is a focus workspace for tasks, groups and milestones." />
+    <meta name="theme-color" content="#247a6b" />
+    <link id="app-favicon" rel="icon" type="image/svg+xml" href="/Pittogramma/focusly-pictogram-light.svg" />
+    <link id="app-favicon-alt" rel="alternate icon" href="/Pittogramma/focusly-pictogram-light.svg" />
+    <link id="app-apple-touch-icon" rel="apple-touch-icon" href="/Pittogramma/focusly-pictogram-light.svg" />
+    <script>
+      (() => {
+        const themeStorageKey = 'studyPlannerTheme';
+        const storedTheme = window.localStorage.getItem(themeStorageKey);
+        const theme = storedTheme === 'dark' || storedTheme === 'light'
+          ? storedTheme
+          : (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+        const themeColor = theme === 'dark' ? '#6fd0bb' : '#247a6b';
+        const iconPath = theme === 'dark'
+          ? '/Pittogramma/focusly-pictogram-dark.svg'
+          : '/Pittogramma/focusly-pictogram-light.svg';
+
+        document.documentElement.dataset.theme = theme;
+        document
+          .querySelector('meta[name="theme-color"]')
+          ?.setAttribute('content', themeColor);
+
+        ['app-favicon', 'app-favicon-alt', 'app-apple-touch-icon'].forEach((id) => {
+          document.getElementById(id)?.setAttribute('href', iconPath);
+        });
+      })();
+    </script>
+    <title>Focusly</title>
   </head>
   <body>
     <div id="root"></div>

@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
+import { getGroupAccentStyle } from '../../utils/groupAppearance';
 import Button from '../UI/Button';
 
 const FOCUS_TIMER_EXPANDED_KEY = 'focus-timer-expanded';
 const FOCUS_TIMER_POSITION_KEY = 'focus-timer-position';
 const FLOATING_MARGIN = 18;
+const DRAG_THRESHOLD = 6;
 
 const getDefaultPosition = (panelWidth, panelHeight) => {
   if (typeof window === 'undefined') {
@@ -63,6 +65,8 @@ const readStoredPosition = () => {
 
 function FocusTimerPanel({
   activeTask,
+  activeGroupName,
+  activeGroupColor,
   isRunning,
   activeTimerLabel,
   onStartTimer,
@@ -71,6 +75,7 @@ function FocusTimerPanel({
 }) {
   const panelRef = useRef(null);
   const dragStateRef = useRef(null);
+  const draggedRef = useRef(false);
   const [isExpanded, setIsExpanded] = useState(readStoredExpanded);
   const [position, setPosition] = useState(readStoredPosition);
   const [isDragging, setIsDragging] = useState(false);
@@ -126,28 +131,42 @@ function FocusTimerPanel({
       return;
     }
 
-    if (event.target.closest('[data-no-drag="true"]')) {
-      return;
-    }
-
     if (!panelRef.current) {
       return;
     }
 
     const rect = panelRef.current.getBoundingClientRect();
+    draggedRef.current = false;
     dragStateRef.current = {
       pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
       offsetX: event.clientX - rect.left,
       offsetY: event.clientY - rect.top,
+      hasMoved: false,
     };
 
     panelRef.current.setPointerCapture?.(event.pointerId);
-    setIsDragging(true);
   };
 
   const handlePointerMove = (event) => {
     if (!dragStateRef.current || dragStateRef.current.pointerId !== event.pointerId || !panelRef.current) {
       return;
+    }
+
+    const distanceX = event.clientX - dragStateRef.current.startX;
+    const distanceY = event.clientY - dragStateRef.current.startY;
+
+    if (!dragStateRef.current.hasMoved) {
+      const distance = Math.hypot(distanceX, distanceY);
+
+      if (distance < DRAG_THRESHOLD) {
+        return;
+      }
+
+      dragStateRef.current.hasMoved = true;
+      draggedRef.current = true;
+      setIsDragging(true);
     }
 
     event.preventDefault();
@@ -170,7 +189,18 @@ function FocusTimerPanel({
     stopDragging();
   };
 
-  const handleToggleExpanded = () => {
+  const handlePanelClick = (event) => {
+    if (draggedRef.current) {
+      draggedRef.current = false;
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
+
+    if (event.target.closest('[data-focus-action="true"]')) {
+      return;
+    }
+
     setIsExpanded((current) => !current);
   };
 
@@ -191,8 +221,9 @@ function FocusTimerPanel({
     ? { left: `${position.x}px`, top: `${position.y}px` }
     : undefined;
 
-  const timerStatus = isRunning ? 'Running' : activeTask ? 'Paused' : 'Idle';
+  const timerLabel = activeTask ? (activeGroupName || 'Focus Timer') : 'Focus Timer';
   const showBackdrop = isRunning && isExpanded;
+  const accentStyle = activeTask && activeGroupColor ? getGroupAccentStyle(activeGroupColor) : undefined;
 
   return (
     <>
@@ -206,32 +237,36 @@ function FocusTimerPanel({
           isDragging ? 'floating-focus-timer--dragging' : '',
           isRunning ? 'floating-focus-timer--active' : '',
         ].filter(Boolean).join(' ')}
-        style={floatingStyle}
+        style={{ ...floatingStyle, ...accentStyle }}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
         onPointerCancel={stopDragging}
+        onClick={handlePanelClick}
       >
         <div className="floating-focus-timer__surface">
-          <div className="floating-focus-timer__chrome">
-            <div className="floating-focus-timer__handle">
-              <span className="floating-focus-timer__status-dot" aria-hidden="true" />
-              <div className="floating-focus-timer__meta">
-                <span className="floating-focus-timer__eyebrow">Focus Timer</span>
-                <strong className="floating-focus-timer__status">{timerStatus}</strong>
+          <div className="floating-focus-timer__grip" aria-hidden="true">
+            <span />
+          </div>
+
+          <div
+            className={`floating-focus-timer__summary ${isExpanded ? 'floating-focus-timer__summary--expanded' : ''}`.trim()}
+          >
+            <div className="floating-focus-timer__chrome">
+              <div className="floating-focus-timer__handle">
+                <span className="floating-focus-timer__status-dot" aria-hidden="true" />
+                <div className="floating-focus-timer__meta">
+                  <span className="floating-focus-timer__eyebrow">{timerLabel}</span>
+                </div>
               </div>
             </div>
 
-            <button
-              type="button"
-              className="floating-focus-timer__toggle"
-              onClick={handleToggleExpanded}
-              aria-label={isExpanded ? 'Reduce focus timer' : 'Expand focus timer'}
-              title={isExpanded ? 'Reduce focus timer' : 'Expand focus timer'}
-              data-no-drag="true"
-            >
-              <i className={`bi ${isExpanded ? 'bi-dash-lg' : 'bi-plus-lg'}`} aria-hidden="true" />
-            </button>
+            {!isExpanded ? (
+              <div className="floating-focus-timer__compact-content">
+                <span className="floating-focus-timer__compact-status">{timerLabel}</span>
+                <strong>{activeTimerLabel}</strong>
+              </div>
+            ) : null}
           </div>
 
           {isExpanded ? (
@@ -259,6 +294,7 @@ function FocusTimerPanel({
                   className="floating-focus-timer__action floating-focus-timer__action--primary"
                   onClick={handlePrimaryAction}
                   disabled={!activeTask}
+                  data-focus-action="true"
                 >
                   <i className={`bi ${isRunning ? 'bi-pause-fill' : 'bi-play-fill'}`} aria-hidden="true" />
                   {isRunning ? 'Pause' : 'Start'}
@@ -269,18 +305,14 @@ function FocusTimerPanel({
                   className="floating-focus-timer__action"
                   onClick={() => activeTask && onResetTimer(activeTask)}
                   disabled={!activeTask}
+                  data-focus-action="true"
                 >
                   <i className="bi bi-arrow-counterclockwise" aria-hidden="true" />
                   Reset
                 </Button>
               </div>
             </div>
-          ) : (
-            <div className="floating-focus-timer__compact-content">
-              <span className="floating-focus-timer__compact-status">{timerStatus}</span>
-              <strong>{activeTimerLabel}</strong>
-            </div>
-          )}
+          ) : null}
         </div>
       </aside>
     </>

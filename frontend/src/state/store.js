@@ -11,6 +11,10 @@ import { taskService } from '../services/taskService';
 const SIDEBAR_STORAGE_KEY = 'sidebar-open';
 const STATS_PERIOD_STORAGE_KEY = 'analytics-stats-period';
 const VALID_STATS_PERIODS = new Set(['day', 'week', 'month', 'year']);
+const authBootstrapState = {
+  uid: '',
+  promise: null,
+};
 
 const getInitialSidebarState = () => {
   if (typeof window === 'undefined') {
@@ -33,6 +37,7 @@ const getInitialStatsPeriod = () => {
 const getBaseState = () => ({
   tasks: [],
   groups: [],
+  workspaceRevision: 0,
   selectedGroupId: '',
   sidebarOpen: getInitialSidebarState(),
   statsPeriod: getInitialStatsPeriod(),
@@ -57,7 +62,7 @@ const resolveSelectedGroupId = (groups, currentSelectedGroupId) => {
   return groups[0]?.id ?? '';
 };
 
-const syncLocalBackup = (uid, tasks, groups) => {
+const syncLocalBackup = (uid, tasks, groups, workspaceRevision) => {
   const migrationMeta = storageService.getMigrationMeta();
 
   if (migrationMeta?.uid && migrationMeta.uid !== uid) {
@@ -66,6 +71,7 @@ const syncLocalBackup = (uid, tasks, groups) => {
 
   storageService.setAppData({
     version: 1,
+    workspaceRevision,
     tasks,
     groups,
   });
@@ -73,18 +79,54 @@ const syncLocalBackup = (uid, tasks, groups) => {
   storageService.setMigrationMeta({
     uid,
     source: migrationMeta?.source ?? 'firestore-sync',
+    workspaceRevision,
     updatedAt: new Date().toISOString(),
   });
 };
 
-const loadRemoteState = async (uid, currentSelectedGroupId = '') => {
-  const { userProfile, tasks, groups } = await firestoreService.loadUserData(uid);
+const getOwnedLocalSnapshot = (uid) => {
+  const migrationMeta = storageService.getMigrationMeta();
+
+  if (!migrationMeta?.uid || migrationMeta.uid !== uid) {
+    return null;
+  }
+
+  const appData = storageService.getAppData();
+  const workspaceRevision = Number.isFinite(Number(migrationMeta.workspaceRevision))
+    ? Number(migrationMeta.workspaceRevision)
+    : Number.isFinite(Number(appData.workspaceRevision))
+      ? Number(appData.workspaceRevision)
+      : 0;
+
+  return {
+    ...appData,
+    workspaceRevision,
+  };
+};
+
+const buildStateFromSnapshot = (snapshot, currentSelectedGroupId = '') => {
+  const tasks = Array.isArray(snapshot?.tasks) ? snapshot.tasks : [];
+  const groups = refreshGroups(Array.isArray(snapshot?.groups) ? snapshot.groups : [], tasks);
+
+  return {
+    tasks,
+    groups,
+    workspaceRevision: Number.isFinite(Number(snapshot?.workspaceRevision))
+      ? Number(snapshot.workspaceRevision)
+      : 0,
+    selectedGroupId: resolveSelectedGroupId(groups, currentSelectedGroupId),
+  };
+};
+
+const loadRemoteState = async (uid, currentSelectedGroupId = '', userProfile = null) => {
+  const { userProfile: resolvedUserProfile, tasks, groups } = await firestoreService.loadUserData(uid, userProfile);
   const nextGroups = refreshGroups(groups, tasks);
 
   return {
     tasks,
     groups: nextGroups,
-    userProfile,
+    userProfile: resolvedUserProfile,
+    workspaceRevision: resolvedUserProfile?.workspaceRevision ?? 0,
     selectedGroupId: resolveSelectedGroupId(nextGroups, currentSelectedGroupId),
   };
 };
@@ -94,6 +136,8 @@ export const useAppStore = create((set, get) => ({
 
   handleAuthStateChange: async (user) => {
     if (!user) {
+      authBootstrapState.uid = '';
+      authBootstrapState.promise = null;
       set((state) => ({
         ...getBaseState(),
         sidebarOpen: state.sidebarOpen,
@@ -103,41 +147,70 @@ export const useAppStore = create((set, get) => ({
       return;
     }
 
-    set({
-      authUser: user,
-      authStatus: 'authenticated',
-      dataStatus: 'loading',
-      migrationStatus: 'idle',
-      appError: '',
-    });
+    if (authBootstrapState.promise && authBootstrapState.uid === user.uid) {
+      await authBootstrapState.promise;
+      return;
+    }
 
-    try {
-      await firestoreService.upsertUserProfile(user);
-
-      set({ migrationStatus: 'running' });
-      const migrationResult = await migrationService.migrateOnFirstLogin(user.uid);
-      const remoteState = await loadRemoteState(user.uid, get().selectedGroupId);
-      syncLocalBackup(user.uid, remoteState.tasks, remoteState.groups);
-
+    const bootstrapPromise = (async () => {
       set({
         authUser: user,
         authStatus: 'authenticated',
-        dataStatus: 'ready',
-        migrationStatus: 'completed',
-        migrationSource: migrationResult.source,
-        tasks: remoteState.tasks,
-        groups: remoteState.groups,
-        selectedGroupId: remoteState.selectedGroupId,
+        dataStatus: 'loading',
+        migrationStatus: 'idle',
         appError: '',
       });
-    } catch (error) {
-      console.error('Failed to bootstrap app data', error);
-      set({
-        dataStatus: 'error',
-        migrationStatus: 'error',
-        appError: error instanceof Error ? error.message : 'Bootstrap failed',
-      });
-    }
+
+      try {
+        const userProfile = await firestoreService.upsertUserProfile(user);
+        const shouldForceRemoteBootstrap = !userProfile.migration?.localStorageImported;
+
+        set({ migrationStatus: 'running' });
+        const migrationResult = await migrationService.migrateOnFirstLogin(user.uid, userProfile);
+        const localSnapshot = shouldForceRemoteBootstrap ? null : getOwnedLocalSnapshot(user.uid);
+        const canBootstrapFromCache = (
+          localSnapshot &&
+          localSnapshot.workspaceRevision === userProfile.workspaceRevision
+        );
+
+        const nextState = canBootstrapFromCache
+          ? buildStateFromSnapshot(localSnapshot, get().selectedGroupId)
+          : await loadRemoteState(user.uid, get().selectedGroupId);
+
+        if (!canBootstrapFromCache) {
+          syncLocalBackup(user.uid, nextState.tasks, nextState.groups, nextState.workspaceRevision);
+        }
+
+        set({
+          authUser: user,
+          authStatus: 'authenticated',
+          dataStatus: 'ready',
+          migrationStatus: 'completed',
+          migrationSource: migrationResult.source,
+          tasks: nextState.tasks,
+          groups: nextState.groups,
+          workspaceRevision: nextState.workspaceRevision,
+          selectedGroupId: nextState.selectedGroupId,
+          appError: '',
+        });
+      } catch (error) {
+        console.error('Failed to bootstrap app data', error);
+        set({
+          dataStatus: 'error',
+          migrationStatus: 'error',
+          appError: error instanceof Error ? error.message : 'Bootstrap failed',
+        });
+      } finally {
+        if (authBootstrapState.promise === bootstrapPromise) {
+          authBootstrapState.uid = '';
+          authBootstrapState.promise = null;
+        }
+      }
+    })();
+
+    authBootstrapState.uid = user.uid;
+    authBootstrapState.promise = bootstrapPromise;
+    await bootstrapPromise;
   },
 
   signInWithGoogle: async () => {
@@ -178,11 +251,12 @@ export const useAppStore = create((set, get) => ({
 
     try {
       const remoteState = await loadRemoteState(authUser.uid, selectedGroupId);
-      syncLocalBackup(authUser.uid, remoteState.tasks, remoteState.groups);
+      syncLocalBackup(authUser.uid, remoteState.tasks, remoteState.groups, remoteState.workspaceRevision);
       set({
         dataStatus: 'ready',
         tasks: remoteState.tasks,
         groups: remoteState.groups,
+        workspaceRevision: remoteState.workspaceRevision,
         selectedGroupId: remoteState.selectedGroupId,
       });
     } catch (error) {
@@ -205,7 +279,7 @@ export const useAppStore = create((set, get) => ({
     try {
       const migrationResult = await migrationService.reimportLocalData(authUser.uid);
       const remoteState = await loadRemoteState(authUser.uid, selectedGroupId);
-      syncLocalBackup(authUser.uid, remoteState.tasks, remoteState.groups);
+      syncLocalBackup(authUser.uid, remoteState.tasks, remoteState.groups, remoteState.workspaceRevision);
 
       set({
         isReimporting: false,
@@ -213,6 +287,7 @@ export const useAppStore = create((set, get) => ({
         migrationSource: migrationResult.source,
         tasks: remoteState.tasks,
         groups: remoteState.groups,
+        workspaceRevision: remoteState.workspaceRevision,
         selectedGroupId: remoteState.selectedGroupId,
       });
     } catch (error) {
@@ -229,18 +304,25 @@ export const useAppStore = create((set, get) => ({
   },
 
   createGroup: async (groupData) => {
-    const { authUser, tasks } = get();
+    const { authUser, tasks, groups, workspaceRevision } = get();
     if (!authUser) {
       return;
     }
 
     try {
-      const groups = await groupService.createGroup(authUser.uid, groupData);
+      const nextGroupState = await groupService.createGroup(
+        authUser.uid,
+        groupData,
+        groups,
+        workspaceRevision
+      );
+
       set((state) => {
-        const nextGroups = refreshGroups(groups, tasks);
-        syncLocalBackup(authUser.uid, tasks, nextGroups);
+        const nextGroups = refreshGroups(nextGroupState.groups, tasks);
+        syncLocalBackup(authUser.uid, tasks, nextGroups, nextGroupState.workspaceRevision);
         return {
           groups: nextGroups,
+          workspaceRevision: nextGroupState.workspaceRevision,
           selectedGroupId: nextGroups[nextGroups.length - 1]?.id || state.selectedGroupId || '',
           activeTab: 'tasks',
           appError: '',
@@ -255,19 +337,27 @@ export const useAppStore = create((set, get) => ({
   },
 
   updateGroup: async (groupId, updates) => {
-    const { authUser, tasks } = get();
+    const { authUser, tasks, groups, workspaceRevision } = get();
     if (!authUser) {
       return;
     }
 
     try {
-      const groups = await groupService.updateGroup(authUser.uid, groupId, updates);
+      const nextGroupState = await groupService.updateGroup(
+        authUser.uid,
+        groupId,
+        updates,
+        groups,
+        workspaceRevision
+      );
+
       set(() => ({
         groups: (() => {
-          const nextGroups = refreshGroups(groups, tasks);
-          syncLocalBackup(authUser.uid, tasks, nextGroups);
+          const nextGroups = refreshGroups(nextGroupState.groups, tasks);
+          syncLocalBackup(authUser.uid, tasks, nextGroups, nextGroupState.workspaceRevision);
           return nextGroups;
         })(),
+        workspaceRevision: nextGroupState.workspaceRevision,
         appError: '',
       }));
     } catch (error) {
@@ -279,24 +369,45 @@ export const useAppStore = create((set, get) => ({
   },
 
   deleteGroup: async (groupId) => {
-    const { authUser } = get();
+    const {
+      authUser,
+      tasks: currentTasks,
+      groups: currentGroups,
+      workspaceRevision,
+    } = get();
     if (!authUser) {
       return;
     }
 
     try {
-      const tasks = await taskService.deleteTasksByGroup(authUser.uid, groupId);
-      const groups = await groupService.deleteGroup(authUser.uid, groupId);
+      const nextTaskState = await taskService.deleteTasksByGroup(
+        authUser.uid,
+        groupId,
+        currentTasks,
+        workspaceRevision
+      );
+      const nextGroupState = await groupService.deleteGroup(
+        authUser.uid,
+        groupId,
+        currentGroups,
+        nextTaskState.workspaceRevision
+      );
 
       set((state) => {
-        const nextGroups = refreshGroups(groups, tasks);
-        syncLocalBackup(authUser.uid, tasks, nextGroups);
+        const nextGroups = refreshGroups(nextGroupState.groups, nextTaskState.tasks);
+        syncLocalBackup(
+          authUser.uid,
+          nextTaskState.tasks,
+          nextGroups,
+          nextGroupState.workspaceRevision
+        );
         const nextSelectedGroupId =
           state.selectedGroupId === groupId ? nextGroups[0]?.id ?? '' : state.selectedGroupId;
 
         return {
-          tasks,
+          tasks: nextTaskState.tasks,
           groups: nextGroups,
+          workspaceRevision: nextGroupState.workspaceRevision,
           selectedGroupId: nextSelectedGroupId,
           appError: '',
         };
@@ -310,20 +421,27 @@ export const useAppStore = create((set, get) => ({
   },
 
   createTask: async (taskData) => {
-    const { authUser } = get();
+    const { authUser, tasks: currentTasks, workspaceRevision } = get();
     if (!authUser) {
       return;
     }
 
     try {
-      const tasks = await taskService.createTask(authUser.uid, taskData);
+      const nextTaskState = await taskService.createTask(
+        authUser.uid,
+        taskData,
+        currentTasks,
+        workspaceRevision
+      );
+
       set((state) => ({
-        tasks,
+        tasks: nextTaskState.tasks,
         groups: (() => {
-          const nextGroups = refreshGroups(state.groups, tasks);
-          syncLocalBackup(authUser.uid, tasks, nextGroups);
+          const nextGroups = refreshGroups(state.groups, nextTaskState.tasks);
+          syncLocalBackup(authUser.uid, nextTaskState.tasks, nextGroups, nextTaskState.workspaceRevision);
           return nextGroups;
         })(),
+        workspaceRevision: nextTaskState.workspaceRevision,
         selectedGroupId: state.selectedGroupId || taskData.groupId || '',
         appError: '',
       }));
@@ -336,20 +454,28 @@ export const useAppStore = create((set, get) => ({
   },
 
   updateTask: async (taskId, updates) => {
-    const { authUser } = get();
+    const { authUser, tasks: currentTasks, workspaceRevision } = get();
     if (!authUser) {
       return;
     }
 
     try {
-      const tasks = await taskService.updateTask(authUser.uid, taskId, updates);
+      const nextTaskState = await taskService.updateTask(
+        authUser.uid,
+        taskId,
+        updates,
+        currentTasks,
+        workspaceRevision
+      );
+
       set((state) => ({
-        tasks,
+        tasks: nextTaskState.tasks,
         groups: (() => {
-          const nextGroups = refreshGroups(state.groups, tasks);
-          syncLocalBackup(authUser.uid, tasks, nextGroups);
+          const nextGroups = refreshGroups(state.groups, nextTaskState.tasks);
+          syncLocalBackup(authUser.uid, nextTaskState.tasks, nextGroups, nextTaskState.workspaceRevision);
           return nextGroups;
         })(),
+        workspaceRevision: nextTaskState.workspaceRevision,
         appError: '',
       }));
     } catch (error) {
@@ -361,20 +487,27 @@ export const useAppStore = create((set, get) => ({
   },
 
   deleteTask: async (taskId) => {
-    const { authUser } = get();
+    const { authUser, tasks: currentTasks, workspaceRevision } = get();
     if (!authUser) {
       return;
     }
 
     try {
-      const tasks = await taskService.deleteTask(authUser.uid, taskId);
+      const nextTaskState = await taskService.deleteTask(
+        authUser.uid,
+        taskId,
+        currentTasks,
+        workspaceRevision
+      );
+
       set((state) => ({
-        tasks,
+        tasks: nextTaskState.tasks,
         groups: (() => {
-          const nextGroups = refreshGroups(state.groups, tasks);
-          syncLocalBackup(authUser.uid, tasks, nextGroups);
+          const nextGroups = refreshGroups(state.groups, nextTaskState.tasks);
+          syncLocalBackup(authUser.uid, nextTaskState.tasks, nextGroups, nextTaskState.workspaceRevision);
           return nextGroups;
         })(),
+        workspaceRevision: nextTaskState.workspaceRevision,
         appError: '',
       }));
     } catch (error) {
@@ -386,20 +519,27 @@ export const useAppStore = create((set, get) => ({
   },
 
   toggleTaskComplete: async (taskId) => {
-    const { authUser } = get();
+    const { authUser, tasks: currentTasks, workspaceRevision } = get();
     if (!authUser) {
       return;
     }
 
     try {
-      const tasks = await taskService.toggleTaskComplete(authUser.uid, taskId);
+      const nextTaskState = await taskService.toggleTaskComplete(
+        authUser.uid,
+        taskId,
+        currentTasks,
+        workspaceRevision
+      );
+
       set((state) => ({
-        tasks,
+        tasks: nextTaskState.tasks,
         groups: (() => {
-          const nextGroups = refreshGroups(state.groups, tasks);
-          syncLocalBackup(authUser.uid, tasks, nextGroups);
+          const nextGroups = refreshGroups(state.groups, nextTaskState.tasks);
+          syncLocalBackup(authUser.uid, nextTaskState.tasks, nextGroups, nextTaskState.workspaceRevision);
           return nextGroups;
         })(),
+        workspaceRevision: nextTaskState.workspaceRevision,
         appError: '',
       }));
     } catch (error) {

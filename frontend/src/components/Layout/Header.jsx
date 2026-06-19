@@ -1,6 +1,7 @@
 // Header sticky della dashboard.
 // Organizza brand, navigazione, controlli di vista e quick actions account-centriche.
 import { useEffect, useState } from 'react';
+import BrandLogo from '../Brand/BrandLogo';
 import Button from '../UI/Button';
 
 function Header({
@@ -39,15 +40,7 @@ function Header({
             <i className="bi bi-list" aria-hidden="true" />
           </Button>
         )}
-        <div className="dashboard-header__logo" aria-label="Focusly">
-          <span className="dashboard-header__logo-mark" aria-hidden="true">
-            <i className="bi bi-journal-richtext" />
-          </span>
-          <div className="dashboard-header__logo-copy">
-            <strong>Focusly</strong>
-            <span>Study workspace</span>
-          </div>
-        </div>
+        <BrandLogo subtitle="Focus Workspace" className="dashboard-header__logo" size="sm" />
       </div>
 
       <Button

@@ -47,14 +47,14 @@ function SettingsPanel({
   const dataSourceLabel = SOURCE_LABELS[migrationSource] ?? 'Firestore workspace';
 
   return (
-    <section className="panel panel--settings settings-screen">
-      <div className="settings-screen__hero">
-        <div className="settings-screen__hero-copy">
+    <section className="panel panel--settings settings-screen workspace-screen">
+      <div className="settings-screen__hero workspace-screen__hero">
+        <div className="settings-screen__hero-copy workspace-screen__hero-copy">
           <span className="settings-screen__eyebrow">Settings</span>
           <h2>Workspace settings</h2>
           <p>Refine the experience, inspect what is loaded in the app, and keep your cloud data aligned.</p>
         </div>
-        <div className="settings-screen__hero-actions">
+        <div className="settings-screen__hero-actions workspace-screen__hero-actions">
           <Button type="button" variant="ghost" onClick={onShowAnalytics}>
             <i className="bi bi-bar-chart-line-fill" aria-hidden="true" /> Open analytics
           </Button>
@@ -65,8 +65,11 @@ function SettingsPanel({
         </div>
       </div>
 
-      <div className="settings-screen__grid">
-        <section className="settings-card">
+      <div className="workspace-screen__viewport">
+        <div className="workspace-screen__scroll">
+          <div className="workspace-screen__body">
+            <div className="settings-screen__grid">
+              <section className="settings-card">
           <div className="settings-card__header">
             <div>
               <span className="settings-card__eyebrow">Appearance</span>
@@ -95,9 +98,9 @@ function SettingsPanel({
               <span>Dark mode</span>
             </button>
           </div>
-        </section>
+              </section>
 
-        <section className="settings-card">
+              <section className="settings-card">
           <div className="settings-card__header">
             <div>
               <span className="settings-card__eyebrow">Analytics</span>
@@ -120,9 +123,9 @@ function SettingsPanel({
               </button>
             ))}
           </div>
-        </section>
+              </section>
 
-        <section className="settings-card settings-card--account">
+              <section className="settings-card settings-card--account">
           <div className="settings-card__header">
             <div>
               <span className="settings-card__eyebrow">Account</span>
@@ -159,9 +162,9 @@ function SettingsPanel({
               <dd>{dataSourceLabel}</dd>
             </div>
           </dl>
-        </section>
+              </section>
 
-        <section className="settings-card settings-card--data">
+              <section className="settings-card settings-card--data">
           <div className="settings-card__header">
             <div>
               <span className="settings-card__eyebrow">Data</span>
@@ -192,7 +195,10 @@ function SettingsPanel({
             <strong>{completionRate}%</strong>
             <p>Your current workspace snapshot is ready for analytics and backup sync.</p>
           </div>
-        </section>
+              </section>
+            </div>
+          </div>
+        </div>
       </div>
     </section>
   );

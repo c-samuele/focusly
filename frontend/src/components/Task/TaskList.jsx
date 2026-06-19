@@ -103,18 +103,18 @@ function TaskList({
   };
 
   return (
-    <section className="panel panel--tasks">
-      <div className="panel__header">
-        <div className="task-panel__header">
-          <div className="task-panel__header-copy">
-            <p className="task-panel__eyebrow">Task Flow</p>
-            <h2>{hasSelectedGroup ? groupName : 'Tasks'}</h2>
-            <p>
-              {hasSelectedGroup
-                ? 'Today on the left, done on the right. Keep the group flow tight.'
-                : 'Select or create a group to begin.'}
-            </p>
-          </div>
+    <section className="panel panel--tasks workspace-screen task-screen">
+      <div className="workspace-screen__hero task-screen__hero">
+        <div className="workspace-screen__hero-copy task-screen__hero-copy">
+          <p className="task-panel__eyebrow">Task Flow</p>
+          <h2>{hasSelectedGroup ? groupName : 'Tasks'}</h2>
+          <p>
+            {hasSelectedGroup
+              ? 'Keep open tasks first and completed ones close for review, even when the layout stacks on mobile.'
+              : 'Select or create a group to begin.'}
+          </p>
+        </div>
+        <div className="workspace-screen__hero-actions task-screen__hero-actions">
           <Button variant="primary" onClick={handleOpenCreate} disabled={!hasSelectedGroup}>
             <i className="bi bi-plus-lg" aria-hidden="true" /> New Task
           </Button>
@@ -158,136 +158,142 @@ function TaskList({
         </>
       ) : null}
 
-      <div className="task-list task-list--separated">
-        {!hasSelectedGroup ? (
-          <p className="empty-state">Pick a group from the left panel to manage tasks.</p>
-        ) : (
-          <div className="task-columns task-columns--balanced">
-            <div className="task-column">
-              <div className="task-column__header">
-                <div className="task-column__header-copy">
-                  <h3>To Do</h3>
-                  <p>Active study blocks waiting for attention.</p>
-                </div>
-                <div className="task-column__header-actions">
-                  <div className="task-filter">
-                    <Button
-                      variant={todoFilter === 'today' ? 'primary' : 'ghost'}
-                      className="task-filter__button"
-                      onClick={() => setTodoFilter('today')}
-                    >
-                      Today
-                    </Button>
-                    <Button
-                      variant={todoFilter === 'upcoming' ? 'primary' : 'ghost'}
-                      className="task-filter__button"
-                      onClick={() => setTodoFilter('upcoming')}
-                    >
-                      Upcoming
-                    </Button>
-                    <Button
-                      variant={todoFilter === 'all' ? 'primary' : 'ghost'}
-                      className="task-filter__button"
-                      onClick={() => setTodoFilter('all')}
-                    >
-                      All
-                    </Button>
+      <div className="workspace-screen__viewport">
+        <div className="workspace-screen__scroll">
+          <div className="workspace-screen__body task-screen__body">
+            <div className="task-list task-list--separated">
+              {!hasSelectedGroup ? (
+                <p className="empty-state">Pick a group from the left panel to manage tasks.</p>
+              ) : (
+                <div className="task-columns task-columns--balanced">
+                  <div className="task-column">
+                    <div className="task-column__header">
+                      <div className="task-column__header-copy">
+                        <h3>To Do</h3>
+                        <p>Active study blocks waiting for attention.</p>
+                      </div>
+                      <div className="task-column__header-actions">
+                        <div className="task-filter">
+                          <Button
+                            variant={todoFilter === 'today' ? 'primary' : 'ghost'}
+                            className="task-filter__button"
+                            onClick={() => setTodoFilter('today')}
+                          >
+                            Today
+                          </Button>
+                          <Button
+                            variant={todoFilter === 'upcoming' ? 'primary' : 'ghost'}
+                            className="task-filter__button"
+                            onClick={() => setTodoFilter('upcoming')}
+                          >
+                            Upcoming
+                          </Button>
+                          <Button
+                            variant={todoFilter === 'all' ? 'primary' : 'ghost'}
+                            className="task-filter__button"
+                            onClick={() => setTodoFilter('all')}
+                          >
+                            All
+                          </Button>
+                        </div>
+                        <span className="task-column__count">{filteredPendingTasks.length}</span>
+                      </div>
+                    </div>
+                    <div className="task-column__body">
+                      {filteredPendingTasks.length === 0 ? (
+                        <p className="empty-state">
+                          {todoFilter === 'today'
+                            ? 'No tasks scheduled for today in this group.'
+                            : todoFilter === 'upcoming'
+                              ? 'No upcoming tasks in this group.'
+                              : 'No active tasks in this group.'}
+                        </p>
+                      ) : (
+                        filteredPendingTasks.map((task) => (
+                          <TaskItem
+                            key={task.id}
+                            task={task}
+                            onToggleComplete={onToggleComplete}
+                            onDelete={onDeleteTask}
+                            onEdit={onEditTask}
+                            onStartTimer={onStartTimer}
+                            onPauseTimer={onPauseTimer}
+                            onResetTimer={onResetTimer}
+                            timerLabel={getTimerLabel(task)}
+                            isTimerRunning={activeTaskId === task.id && isRunning}
+                            isActiveTimer={activeTaskId === task.id}
+                          />
+                        ))
+                      )}
+                    </div>
                   </div>
-                  <span className="task-column__count">{filteredPendingTasks.length}</span>
-                </div>
-              </div>
-              <div className="task-column__body">
-                {filteredPendingTasks.length === 0 ? (
-                  <p className="empty-state">
-                    {todoFilter === 'today'
-                      ? 'No tasks scheduled for today in this group.'
-                      : todoFilter === 'upcoming'
-                        ? 'No upcoming tasks in this group.'
-                      : 'No active tasks in this group.'}
-                  </p>
-                ) : (
-                  filteredPendingTasks.map((task) => (
-                    <TaskItem
-                      key={task.id}
-                      task={task}
-                      onToggleComplete={onToggleComplete}
-                      onDelete={onDeleteTask}
-                      onEdit={onEditTask}
-                      onStartTimer={onStartTimer}
-                      onPauseTimer={onPauseTimer}
-                      onResetTimer={onResetTimer}
-                      timerLabel={getTimerLabel(task)}
-                      isTimerRunning={activeTaskId === task.id && isRunning}
-                      isActiveTimer={activeTaskId === task.id}
-                    />
-                  ))
-                )}
-              </div>
-            </div>
 
-            <div className="task-column">
-              <div className="task-column__header">
-                <div className="task-column__header-copy">
-                  <h3>Completed</h3>
-                  <p>Finished blocks archived for quick review.</p>
-                </div>
-                <div className="task-column__header-actions">
-                  <div className="task-filter">
-                    <Button
-                      variant={completedFilter === 'today' ? 'primary' : 'ghost'}
-                      className="task-filter__button"
-                      onClick={() => setCompletedFilter('today')}
-                    >
-                      Today
-                    </Button>
-                    <Button
-                      variant={completedFilter === 'week' ? 'primary' : 'ghost'}
-                      className="task-filter__button"
-                      onClick={() => setCompletedFilter('week')}
-                    >
-                      Week
-                    </Button>
-                    <Button
-                      variant={completedFilter === 'all' ? 'primary' : 'ghost'}
-                      className="task-filter__button"
-                      onClick={() => setCompletedFilter('all')}
-                    >
-                      All
-                    </Button>
+                  <div className="task-column">
+                    <div className="task-column__header">
+                      <div className="task-column__header-copy">
+                        <h3>Completed</h3>
+                        <p>Finished blocks archived for quick review.</p>
+                      </div>
+                      <div className="task-column__header-actions">
+                        <div className="task-filter">
+                          <Button
+                            variant={completedFilter === 'today' ? 'primary' : 'ghost'}
+                            className="task-filter__button"
+                            onClick={() => setCompletedFilter('today')}
+                          >
+                            Today
+                          </Button>
+                          <Button
+                            variant={completedFilter === 'week' ? 'primary' : 'ghost'}
+                            className="task-filter__button"
+                            onClick={() => setCompletedFilter('week')}
+                          >
+                            Week
+                          </Button>
+                          <Button
+                            variant={completedFilter === 'all' ? 'primary' : 'ghost'}
+                            className="task-filter__button"
+                            onClick={() => setCompletedFilter('all')}
+                          >
+                            All
+                          </Button>
+                        </div>
+                        <span className="task-column__count">{filteredCompletedTasks.length}</span>
+                      </div>
+                    </div>
+                    <div className="task-column__body">
+                      {filteredCompletedTasks.length === 0 ? (
+                        <p className="empty-state">
+                          {completedFilter === 'today'
+                            ? 'No tasks completed today in this group.'
+                            : completedFilter === 'week'
+                              ? 'No tasks completed this week in this group.'
+                              : 'Completed tasks will appear here.'}
+                        </p>
+                      ) : (
+                        filteredCompletedTasks.map((task) => (
+                          <TaskItem
+                            key={task.id}
+                            task={task}
+                            onToggleComplete={onToggleComplete}
+                            onDelete={onDeleteTask}
+                            onEdit={onEditTask}
+                            onStartTimer={onStartTimer}
+                            onPauseTimer={onPauseTimer}
+                            onResetTimer={onResetTimer}
+                            timerLabel={getTimerLabel(task)}
+                            isTimerRunning={activeTaskId === task.id && isRunning}
+                            isActiveTimer={activeTaskId === task.id}
+                          />
+                        ))
+                      )}
+                    </div>
                   </div>
-                  <span className="task-column__count">{filteredCompletedTasks.length}</span>
                 </div>
-              </div>
-              <div className="task-column__body">
-                {filteredCompletedTasks.length === 0 ? (
-                  <p className="empty-state">
-                    {completedFilter === 'today'
-                      ? 'No tasks completed today in this group.'
-                      : completedFilter === 'week'
-                        ? 'No tasks completed this week in this group.'
-                      : 'Completed tasks will appear here.'}
-                  </p>
-                ) : (
-                  filteredCompletedTasks.map((task) => (
-                    <TaskItem
-                      key={task.id}
-                      task={task}
-                      onToggleComplete={onToggleComplete}
-                      onDelete={onDeleteTask}
-                      onEdit={onEditTask}
-                      onStartTimer={onStartTimer}
-                      onPauseTimer={onPauseTimer}
-                      onResetTimer={onResetTimer}
-                      timerLabel={getTimerLabel(task)}
-                      isTimerRunning={activeTaskId === task.id && isRunning}
-                      isActiveTimer={activeTaskId === task.id}
-                    />
-                  ))
-                )}
-              </div>
+              )}
             </div>
           </div>
-        )}
+        </div>
       </div>
     </section>
   );

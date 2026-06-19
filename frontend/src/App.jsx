@@ -1,10 +1,13 @@
 // Componente radice dell'applicazione.
 // Gestisce bootstrap auth + dati prima di mostrare la dashboard.
 import { useEffect } from 'react';
+import BrandLogo from './components/Brand/BrandLogo';
 import SignInScreen from './components/Auth/SignInScreen';
+import BootstrapScreen from './components/UI/BootstrapScreen';
 import Dashboard from './pages/Dashboard';
 import { authService } from './services/authService';
 import { useAppStore } from './state/store';
+import { applyThemeToDocument, getInitialTheme } from './utils/themePreferences';
 
 function App() {
   const authStatus = useAppStore((state) => state.authStatus);
@@ -16,6 +19,10 @@ function App() {
   const signInWithGoogle = useAppStore((state) => state.signInWithGoogle);
 
   useEffect(() => {
+    applyThemeToDocument(getInitialTheme());
+  }, []);
+
+  useEffect(() => {
     const unsubscribe = authService.subscribeToAuthChanges((user) => {
       handleAuthStateChange(user);
     });
@@ -25,13 +32,12 @@ function App() {
 
   if (authStatus === 'loading') {
     return (
-      <main className="auth-shell">
-        <section className="auth-card auth-card--loading">
-          <span className="auth-card__eyebrow">Focusly</span>
-          <h1>Verifica della sessione in corso.</h1>
-          <p>Sto controllando autenticazione e stato della migrazione Firebase.</p>
-        </section>
-      </main>
+      <BootstrapScreen
+        eyebrow="Launch"
+        title="Preparing Focusly"
+        status="Checking session"
+        detail="Starting secure sync"
+      />
     );
   }
 
@@ -47,17 +53,12 @@ function App() {
 
   if (dataStatus === 'loading') {
     return (
-      <main className="auth-shell">
-        <section className="auth-card auth-card--loading">
-          <span className="auth-card__eyebrow">Focusly</span>
-          <h1>{migrationStatus === 'running' ? 'Migrazione iniziale in corso.' : 'Caricamento dati in corso.'}</h1>
-          <p>
-            {migrationStatus === 'running'
-              ? 'Sto importando il localStorage nel tuo spazio Firestore e poi ricarico la dashboard.'
-              : 'Sto caricando task, gruppi e milestone da Firestore.'}
-          </p>
-        </section>
-      </main>
+      <BootstrapScreen
+        eyebrow={migrationStatus === 'running' ? 'Import' : 'Sync'}
+        title={migrationStatus === 'running' ? 'Importing your backup' : 'Loading your workspace'}
+        status={migrationStatus === 'running' ? 'Merging local data' : 'Fetching cloud data'}
+        detail={migrationStatus === 'running' ? 'Almost ready' : 'Building focus view'}
+      />
     );
   }
 
@@ -65,9 +66,14 @@ function App() {
     return (
       <main className="auth-shell">
         <section className="auth-card auth-card--loading">
-          <span className="auth-card__eyebrow">Focusly</span>
-          <h1>Impossibile completare il bootstrap Firebase.</h1>
-          <p>{appError || 'Controlla configurazione Firebase, regole e variabili ambiente.'}</p>
+          <BrandLogo
+            subtitle="Focus Workspace"
+            orientation="stacked"
+            size="lg"
+            className="auth-card__brand auth-card__brand--loading"
+          />
+          <h1>Bootstrap unavailable.</h1>
+          <p>{appError || 'Check Firebase config, rules and env vars.'}</p>
         </section>
       </main>
     );

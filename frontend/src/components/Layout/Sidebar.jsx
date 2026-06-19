@@ -1,5 +1,7 @@
 // Sidebar laterale per i gruppi di studio.
 // Su desktop è fixed a sinistra, su tablet/mobile è un drawer.
+import { useEffect } from 'react';
+import Button from '../UI/Button';
 import GroupList from '../Group/GroupList';
 
 function Sidebar({
@@ -7,12 +9,26 @@ function Sidebar({
   onClose,
   groups,
   selectedGroupId,
-  onCreateGroup,
-  onUpdateGroup,
+  onOpenCreateGroup,
+  onOpenEditGroup,
+  onOpenViewMilestones,
   onDeleteGroup,
   onSelectGroup,
   taskCounts,
 }) {
+  useEffect(() => {
+    if (!isOpen) {
+      document.body.style.overflow = '';
+      return undefined;
+    }
+
+    document.body.style.overflow = 'hidden';
+
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [isOpen]);
+
   return (
     <>
       {/* Overlay per mobile/tablet quando drawer è aperto */}
@@ -25,14 +41,30 @@ function Sidebar({
       )}
 
       <aside className={`sidebar ${isOpen ? 'sidebar--open' : ''}`}>
+        <div className="sidebar__sheet-header">
+          <div>
+            <span className="sidebar__sheet-eyebrow">Workspace</span>
+            <strong>Groups</strong>
+          </div>
+          <Button
+            variant="ghost"
+            className="sidebar__sheet-close icon-button"
+            onClick={onClose}
+            aria-label="Chiudi gruppi"
+            title="Chiudi gruppi"
+          >
+            <i className="bi bi-x-lg" aria-hidden="true" />
+          </Button>
+        </div>
+
         <GroupList
           groups={groups}
           selectedGroupId={selectedGroupId}
-          onCreateGroup={onCreateGroup}
-          onUpdateGroup={onUpdateGroup}
+          onOpenCreateGroup={onOpenCreateGroup}
+          onOpenEditGroup={onOpenEditGroup}
+          onOpenViewMilestones={onOpenViewMilestones}
           onDeleteGroup={onDeleteGroup}
           onSelectGroup={onSelectGroup}
-          onViewMilestones={() => {}}
           taskCounts={taskCounts}
         />
       </aside>

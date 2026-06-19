@@ -47,8 +47,8 @@ function StudyChart({
   const isDayView = period === 'day';
 
   return (
-    <section className="analytics panel">
-      <div className="analytics__header">
+    <section className="analytics panel workspace-screen workspace-screen--analytics">
+      <div className="analytics__toolbar">
         <div className="analytics__filters">
           {Object.entries(PERIOD_LABELS).map(([value, label]) => (
             <Button
@@ -63,90 +63,92 @@ function StudyChart({
         </div>
       </div>
 
-      <div className={`analytics__summary ${showBreakdown ? 'analytics__summary--split' : 'analytics__summary--single'}`}>
-        <div className="analytics-card analytics-card--today">
-          <div className="analytics-card__today-header">
-            <div>
-              <span>{stats.periodLabel}</span>
-              <p className="analytics-card__meta">{period === 'day' ? 'Open tasks scheduled for today.' : 'Open tasks still planned in this period.'}</p>
+      <div className="analytics__body">
+        <div className={`analytics__summary ${showBreakdown ? 'analytics__summary--split' : 'analytics__summary--single'}`}>
+          <div className="analytics-card analytics-card--today">
+            <div className="analytics-card__today-header">
+              <div>
+                <span>{stats.periodLabel}</span>
+                <p className="analytics-card__meta">{period === 'day' ? 'Open tasks scheduled for today.' : 'Open tasks still planned in this period.'}</p>
+              </div>
+              <strong className="analytics-card__today-count">{periodTasks.length}</strong>
             </div>
-            <strong className="analytics-card__today-count">{periodTasks.length}</strong>
-          </div>
-          {periodTasks.length === 0 ? (
-            <p className="analytics-card__meta">No open tasks scheduled in this period.</p>
-          ) : (
-            <div className="analytics-today-list">
-              {periodTasks.map((task) => (
-                <article
-                  key={task.id}
-                  className={`analytics-today-item ${activeTaskId === task.id ? 'analytics-today-item--active' : ''}`}
-                  style={getGroupAccentStyle(task.groupColor)}
-                >
-                  <div className="analytics-today-item__content">
-                    <div className="analytics-today-item__topline">
-                      <span className="analytics-today-item__group">{task.groupName}</span>
-                      <span className="analytics-today-item__date">{formatScheduledLabel(task.scheduledDate, period)}</span>
-                    </div>
-                    <p className="analytics-today-item__title">{task.title}</p>
-                    <div className="analytics-today-item__footer">
-                      <span className={`priority-badge priority-badge--${task.priority}`}>{task.priority}</span>
-                      <small className="analytics-today-item__timer">
-                        <i className="bi bi-clock" aria-hidden="true" /> {task.timer} min
-                      </small>
-                    </div>
-                  </div>
-
-                  <Button
-                    variant={isRunning && activeTaskId === task.id ? 'ghost' : 'primary'}
-                    className="icon-button analytics-today-item__play"
-                    onClick={() => (
-                      isRunning && activeTaskId === task.id
-                        ? onPauseTimer?.()
-                        : onStartTimer?.(task)
-                    )}
-                    disabled={task.timer <= 0}
-                    aria-label={isRunning && activeTaskId === task.id ? 'Metti in pausa timer' : 'Avvia timer del task'}
-                    title={isRunning && activeTaskId === task.id ? 'Metti in pausa timer' : 'Avvia timer del task'}
+            {periodTasks.length === 0 ? (
+              <p className="analytics-card__meta">No open tasks scheduled in this period.</p>
+            ) : (
+              <div className="analytics-today-list">
+                {periodTasks.map((task) => (
+                  <article
+                    key={task.id}
+                    className={`analytics-today-item ${activeTaskId === task.id ? 'analytics-today-item--active' : ''}`}
+                    style={getGroupAccentStyle(task.groupColor)}
                   >
-                    <i
-                      className={`bi ${isRunning && activeTaskId === task.id ? 'bi-pause-fill' : 'bi-play-fill'}`}
-                      aria-hidden="true"
-                    />
-                  </Button>
-                </article>
-              ))}
-            </div>
-          )}
-        </div>
-        {showBreakdown ? (
-          isDayView
-            ? <StudyDayPieChart stats={stats} theme={theme} />
-            : <StudyHistoryChart stats={historyStats} theme={theme} />
-        ) : null}
-      </div>
+                    <div className="analytics-today-item__content">
+                      <div className="analytics-today-item__topline">
+                        <span className="analytics-today-item__group">{task.groupName}</span>
+                        <span className="analytics-today-item__date">{formatScheduledLabel(task.scheduledDate, period)}</span>
+                      </div>
+                      <p className="analytics-today-item__title">{task.title}</p>
+                      <div className="analytics-today-item__footer">
+                        <span className={`priority-badge priority-badge--${task.priority}`}>{task.priority}</span>
+                        <small className="analytics-today-item__timer">
+                          <i className="bi bi-clock" aria-hidden="true" /> {task.timer} min
+                        </small>
+                      </div>
+                    </div>
 
-      <div className="analytics__totals">
-        <div className="analytics-card analytics-card--progress">
-          <span>Total hours expected</span>
-          <strong>{formatMinutes(stats.totalPlannedMinutes)}</strong>
-          <p className="analytics-card__subtext">{formatMinutes(stats.totalMinutes)} completed</p>
-          <div className="analytics-progress" aria-hidden="true">
-            <div
-              className="analytics-progress__bar"
-              style={{ width: `${stats.completionRate}%` }}
-            />
+                    <Button
+                      variant={isRunning && activeTaskId === task.id ? 'ghost' : 'primary'}
+                      className="icon-button analytics-today-item__play"
+                      onClick={() => (
+                        isRunning && activeTaskId === task.id
+                          ? onPauseTimer?.()
+                          : onStartTimer?.(task)
+                      )}
+                      disabled={task.timer <= 0}
+                      aria-label={isRunning && activeTaskId === task.id ? 'Metti in pausa timer' : 'Avvia timer del task'}
+                      title={isRunning && activeTaskId === task.id ? 'Metti in pausa timer' : 'Avvia timer del task'}
+                    >
+                      <i
+                        className={`bi ${isRunning && activeTaskId === task.id ? 'bi-pause-fill' : 'bi-play-fill'}`}
+                        aria-hidden="true"
+                      />
+                    </Button>
+                  </article>
+                ))}
+              </div>
+            )}
           </div>
-          <p className="analytics-card__meta">{stats.completionRate}% of planned hours completed</p>
+          {showBreakdown ? (
+            isDayView
+              ? <StudyDayPieChart stats={stats} theme={theme} />
+              : <StudyHistoryChart stats={historyStats} theme={theme} />
+          ) : null}
         </div>
-        <div className="analytics-card analytics-card--metric">
-          <span>Completed tasks</span>
-          <strong>{stats.totalCompletedTasks}</strong>
-          <p className="analytics-card__meta">Finished in {stats.periodLabel.toLowerCase()}.</p>
-        </div>
-        <div className="analytics-card analytics-card--metric">
-          <span>Open tasks</span>
-          <strong>{stats.totalPendingTasks}</strong>
-          <p className="analytics-card__meta">{stats.totalTasks} total tasks in this period.</p>
+
+        <div className="analytics__totals">
+          <div className="analytics-card analytics-card--progress">
+            <span>Total hours expected</span>
+            <strong>{formatMinutes(stats.totalPlannedMinutes)}</strong>
+            <p className="analytics-card__subtext">{formatMinutes(stats.totalMinutes)} completed</p>
+            <div className="analytics-progress" aria-hidden="true">
+              <div
+                className="analytics-progress__bar"
+                style={{ width: `${stats.completionRate}%` }}
+              />
+            </div>
+            <p className="analytics-card__meta">{stats.completionRate}% of planned hours completed</p>
+          </div>
+          <div className="analytics-card analytics-card--metric">
+            <span>Completed tasks</span>
+            <strong>{stats.totalCompletedTasks}</strong>
+            <p className="analytics-card__meta">Finished in {stats.periodLabel.toLowerCase()}.</p>
+          </div>
+          <div className="analytics-card analytics-card--metric">
+            <span>Open tasks</span>
+            <strong>{stats.totalPendingTasks}</strong>
+            <p className="analytics-card__meta">{stats.totalTasks} total tasks in this period.</p>
+          </div>
         </div>
       </div>
     </section>

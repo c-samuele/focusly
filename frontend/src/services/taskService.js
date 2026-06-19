@@ -13,8 +13,9 @@ const createId = () => {
 
 const getTasks = async (uid) => firestoreService.listTasks(uid);
 
-const createTaskItem = async (uid, taskData) => {
-  const currentTasks = await getTasks(uid);
+const sortTasksByOrder = (tasks) => [...tasks].sort((left, right) => left.order - right.order);
+
+const createTaskItem = async (uid, taskData, currentTasks = [], currentWorkspaceRevision = 0) => {
   const now = new Date().toISOString();
 
   // In creazione fissiamo sempre gli attributi tecnici mancanti,
@@ -29,15 +30,27 @@ const createTaskItem = async (uid, taskData) => {
     order: currentTasks.length,
   });
 
-  return firestoreService.createTask(uid, task, task.order);
+  const workspaceRevision = await firestoreService.createTask(
+    uid,
+    task,
+    task.order,
+    currentWorkspaceRevision
+  );
+
+  return {
+    tasks: sortTasksByOrder([...currentTasks, task]),
+    workspaceRevision,
+  };
 };
 
-const updateTaskItem = async (uid, taskId, updates) => {
-  const tasks = await getTasks(uid);
-  const taskToUpdate = tasks.find((task) => task.id === taskId);
+const updateTaskItem = async (uid, taskId, updates, currentTasks = [], currentWorkspaceRevision = 0) => {
+  const taskToUpdate = currentTasks.find((task) => task.id === taskId);
 
   if (!taskToUpdate) {
-    return tasks;
+    return {
+      tasks: currentTasks,
+      workspaceRevision: currentWorkspaceRevision,
+    };
   }
 
   const nextTask = createTask({
@@ -49,18 +62,39 @@ const updateTaskItem = async (uid, taskId, updates) => {
     scheduledDate: updates.scheduledDate || taskToUpdate.scheduledDate || getTodayDate(),
   });
 
-  return firestoreService.updateTask(uid, nextTask, taskToUpdate.order);
+  const workspaceRevision = await firestoreService.updateTask(
+    uid,
+    nextTask,
+    taskToUpdate.order,
+    currentWorkspaceRevision
+  );
+
+  return {
+    tasks: sortTasksByOrder(
+      currentTasks.map((task) => (task.id === taskId ? nextTask : task))
+    ),
+    workspaceRevision,
+  };
 };
 
-const deleteTaskItem = (uid, taskId) => firestoreService.deleteTask(uid, taskId);
+const deleteTaskItem = async (uid, taskId, currentTasks = [], currentWorkspaceRevision = 0) => {
+  const workspaceRevision = await firestoreService.deleteTask(uid, taskId, currentWorkspaceRevision);
 
-const toggleTaskComplete = async (uid, taskId) => {
+  return {
+    tasks: sortTasksByOrder(currentTasks.filter((task) => task.id !== taskId)),
+    workspaceRevision,
+  };
+};
+
+const toggleTaskComplete = async (uid, taskId, currentTasks = [], currentWorkspaceRevision = 0) => {
   const now = new Date().toISOString();
-  const tasks = await getTasks(uid);
-  const taskToToggle = tasks.find((task) => task.id === taskId);
+  const taskToToggle = currentTasks.find((task) => task.id === taskId);
 
   if (!taskToToggle) {
-    return tasks;
+    return {
+      tasks: currentTasks,
+      workspaceRevision: currentWorkspaceRevision,
+    };
   }
 
   const nextCompleted = !taskToToggle.completed;
@@ -73,10 +107,38 @@ const toggleTaskComplete = async (uid, taskId) => {
     completedAt: nextCompleted ? now : null,
   });
 
-  return firestoreService.updateTask(uid, nextTask, taskToToggle.order);
+  const workspaceRevision = await firestoreService.updateTask(
+    uid,
+    nextTask,
+    taskToToggle.order,
+    currentWorkspaceRevision
+  );
+
+  return {
+    tasks: sortTasksByOrder(
+      currentTasks.map((task) => (task.id === taskId ? nextTask : task))
+    ),
+    workspaceRevision,
+  };
 };
 
-const deleteTasksByGroup = (uid, groupId) => firestoreService.deleteTasksByGroup(uid, groupId);
+const deleteTasksByGroup = async (uid, groupId, currentTasks = [], currentWorkspaceRevision = 0) => {
+  const taskIdsToDelete = currentTasks
+    .filter((task) => task.groupId === groupId)
+    .map((task) => task.id);
+
+  const workspaceRevision = await firestoreService.deleteTasksByGroup(
+    uid,
+    groupId,
+    taskIdsToDelete,
+    currentWorkspaceRevision
+  );
+
+  return {
+    tasks: sortTasksByOrder(currentTasks.filter((task) => task.groupId !== groupId)),
+    workspaceRevision,
+  };
+};
 
 export const taskService = {
   getTasks,

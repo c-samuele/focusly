@@ -5,6 +5,7 @@ function GroupNameField({
   error = null,
   minLength = 3,
   maxLength = 50,
+  inputRef = null,
 }) {
   const charCount = value.length;
 
@@ -12,6 +13,7 @@ function GroupNameField({
     <div className="group-modal__field">
       <label htmlFor="groupName" className="form-label">Group Name</label>
       <input
+        ref={inputRef}
         id="groupName"
         type="text"
         className={`group-modal__input ${error ? 'is-invalid' : ''}`}

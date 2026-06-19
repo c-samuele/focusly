@@ -1,9 +1,9 @@
 import {
   collection,
-  deleteDoc,
   doc,
   getDoc,
   getDocs,
+  increment,
   orderBy,
   query,
   serverTimestamp,
@@ -30,24 +30,51 @@ const getGroupsCollectionRef = (uid) => collection(db, 'users', uid, 'groups');
 const getGroupRef = (uid, groupId) => doc(db, 'users', uid, 'groups', groupId);
 const getMilestonesCollectionRef = (uid, groupId) => collection(db, 'users', uid, 'groups', groupId, 'milestones');
 const getMilestoneRef = (uid, groupId, milestoneId) => doc(db, 'users', uid, 'groups', groupId, 'milestones', milestoneId);
+const normalizeWorkspaceRevision = (value) => (
+  Number.isFinite(Number(value)) ? Number(value) : 0
+);
+
+const queueWorkspaceRevisionUpdate = (batch, uid) => {
+  batch.set(
+    getUserRef(uid),
+    {
+      workspaceRevision: increment(1),
+    },
+    { merge: true }
+  );
+};
 
 const listMilestones = async (uid, groupId) => {
   const snapshot = await getDocs(query(getMilestonesCollectionRef(uid, groupId), orderBy('order', 'asc')));
   return snapshot.docs.map((docSnapshot) => mapMilestoneFromFirestore(docSnapshot.id, docSnapshot.data()));
 };
 
-const syncMilestonesForGroup = async (uid, groupId, milestones = [], { mergeOnly = false } = {}) => {
+const syncMilestonesForGroup = async (
+  uid,
+  groupId,
+  milestones = [],
+  { mergeOnly = false, previousMilestoneIds } = {},
+  existingBatch = null
+) => {
   const milestonesRef = getMilestonesCollectionRef(uid, groupId);
-  const batch = writeBatch(db);
+  const batch = existingBatch ?? writeBatch(db);
   const nextIds = new Set(milestones.map((milestone) => milestone.id));
 
   if (!mergeOnly) {
-    const existingSnapshot = await getDocs(milestonesRef);
-    existingSnapshot.forEach((docSnapshot) => {
-      if (!nextIds.has(docSnapshot.id)) {
-        batch.delete(docSnapshot.ref);
-      }
-    });
+    if (Array.isArray(previousMilestoneIds)) {
+      previousMilestoneIds.forEach((milestoneId) => {
+        if (!nextIds.has(milestoneId)) {
+          batch.delete(getMilestoneRef(uid, groupId, milestoneId));
+        }
+      });
+    } else {
+      const existingSnapshot = await getDocs(milestonesRef);
+      existingSnapshot.forEach((docSnapshot) => {
+        if (!nextIds.has(docSnapshot.id)) {
+          batch.delete(docSnapshot.ref);
+        }
+      });
+    }
   }
 
   milestones.forEach((milestone, index) => {
@@ -58,7 +85,9 @@ const syncMilestonesForGroup = async (uid, groupId, milestones = [], { mergeOnly
     );
   });
 
-  await batch.commit();
+  if (!existingBatch) {
+    await batch.commit();
+  }
 };
 
 const listTasks = async (uid) => {
@@ -97,6 +126,7 @@ const upsertUserProfile = async (user) => {
     email: user.email ?? currentData?.email ?? '',
     photoURL: user.photoURL ?? currentData?.photoURL ?? '',
     lastLoginAt: serverTimestamp(),
+    workspaceRevision: normalizeWorkspaceRevision(currentData?.workspaceRevision),
   };
 
   if (!snapshot.exists()) {
@@ -111,18 +141,31 @@ const upsertUserProfile = async (user) => {
   }
 
   await setDoc(userRef, payload, { merge: true });
-  return getUserProfile(user.uid);
+  return mapUserProfileFromFirestore(user.uid, {
+    ...currentData,
+    displayName: payload.displayName,
+    email: payload.email,
+    photoURL: payload.photoURL,
+    createdAt: currentData?.createdAt ?? new Date(),
+    lastLoginAt: new Date(),
+    workspaceRevision: normalizeWorkspaceRevision(currentData?.workspaceRevision),
+    migration: payload.migration ?? currentData?.migration ?? {
+      localStorageImported: false,
+      importedAt: null,
+      source: null,
+    },
+  });
 };
 
-const loadUserData = async (uid) => {
-  const [userProfile, tasks, groups] = await Promise.all([
-    getUserProfile(uid),
+const loadUserData = async (uid, userProfile = null) => {
+  const [resolvedUserProfile, tasks, groups] = await Promise.all([
+    userProfile ? Promise.resolve(userProfile) : getUserProfile(uid),
     listTasks(uid),
     listGroups(uid),
   ]);
 
   return {
-    userProfile,
+    userProfile: resolvedUserProfile,
     tasks,
     groups,
   };
@@ -177,6 +220,19 @@ const importLocalData = async (uid, appData, { source = 'localStorage', mergeOnl
     });
   });
 
+  queueWorkspaceRevisionUpdate(batch, uid);
+  batch.set(
+    getUserRef(uid),
+    {
+      migration: {
+        localStorageImported: true,
+        importedAt: serverTimestamp(),
+        source,
+      },
+    },
+    { merge: true }
+  );
+
   await batch.commit();
 
   if (!mergeOnly) {
@@ -187,60 +243,90 @@ const importLocalData = async (uid, appData, { source = 'localStorage', mergeOnl
     );
   }
 
-  await markMigrationComplete(uid, source);
 };
 
-const createTask = async (uid, task, order) => {
-  await setDoc(getTaskRef(uid, task.id), mapTaskToFirestore(task, order), { merge: true });
-  return listTasks(uid);
-};
-
-const updateTask = async (uid, task, order) => {
-  await setDoc(getTaskRef(uid, task.id), mapTaskToFirestore(task, order), { merge: true });
-  return listTasks(uid);
-};
-
-const deleteTask = async (uid, taskId) => {
-  await deleteDoc(getTaskRef(uid, taskId));
-  return listTasks(uid);
-};
-
-const deleteTasksByGroup = async (uid, groupId) => {
-  const snapshot = await getDocs(query(getTasksCollectionRef(uid), where('groupId', '==', groupId)));
+const createTask = async (uid, task, order, currentWorkspaceRevision = 0) => {
   const batch = writeBatch(db);
-
-  snapshot.forEach((docSnapshot) => {
-    batch.delete(docSnapshot.ref);
-  });
-
+  batch.set(getTaskRef(uid, task.id), mapTaskToFirestore(task, order), { merge: true });
+  queueWorkspaceRevisionUpdate(batch, uid);
   await batch.commit();
-  return listTasks(uid);
+  return normalizeWorkspaceRevision(currentWorkspaceRevision) + 1;
 };
 
-const createGroup = async (uid, group, order) => {
-  await setDoc(getGroupRef(uid, group.id), mapGroupToFirestore(group, order), { merge: true });
-  await syncMilestonesForGroup(uid, group.id, group.milestones ?? [], { mergeOnly: false });
-  return listGroups(uid);
+const updateTask = async (uid, task, order, currentWorkspaceRevision = 0) => {
+  const batch = writeBatch(db);
+  batch.set(getTaskRef(uid, task.id), mapTaskToFirestore(task, order), { merge: true });
+  queueWorkspaceRevisionUpdate(batch, uid);
+  await batch.commit();
+  return normalizeWorkspaceRevision(currentWorkspaceRevision) + 1;
 };
 
-const updateGroup = async (uid, group, order) => {
-  await setDoc(getGroupRef(uid, group.id), mapGroupToFirestore(group, order), { merge: true });
-  await syncMilestonesForGroup(uid, group.id, group.milestones ?? [], { mergeOnly: false });
-  return listGroups(uid);
+const deleteTask = async (uid, taskId, currentWorkspaceRevision = 0) => {
+  const batch = writeBatch(db);
+  batch.delete(getTaskRef(uid, taskId));
+  queueWorkspaceRevisionUpdate(batch, uid);
+  await batch.commit();
+  return normalizeWorkspaceRevision(currentWorkspaceRevision) + 1;
 };
 
-const deleteGroup = async (uid, groupId) => {
-  const milestonesSnapshot = await getDocs(getMilestonesCollectionRef(uid, groupId));
+const deleteTasksByGroup = async (uid, groupId, taskIds = null, currentWorkspaceRevision = 0) => {
   const batch = writeBatch(db);
 
-  milestonesSnapshot.forEach((docSnapshot) => {
-    batch.delete(docSnapshot.ref);
-  });
+  if (Array.isArray(taskIds)) {
+    taskIds.forEach((taskId) => {
+      batch.delete(getTaskRef(uid, taskId));
+    });
+  } else {
+    const snapshot = await getDocs(query(getTasksCollectionRef(uid), where('groupId', '==', groupId)));
+    snapshot.forEach((docSnapshot) => {
+      batch.delete(docSnapshot.ref);
+    });
+  }
+
+  queueWorkspaceRevisionUpdate(batch, uid);
+  await batch.commit();
+  return normalizeWorkspaceRevision(currentWorkspaceRevision) + 1;
+};
+
+const createGroup = async (uid, group, order, currentWorkspaceRevision = 0) => {
+  const batch = writeBatch(db);
+  batch.set(getGroupRef(uid, group.id), mapGroupToFirestore(group, order), { merge: true });
+  queueWorkspaceRevisionUpdate(batch, uid);
+  await syncMilestonesForGroup(uid, group.id, group.milestones ?? [], { mergeOnly: true }, batch);
+  await batch.commit();
+  return normalizeWorkspaceRevision(currentWorkspaceRevision) + 1;
+};
+
+const updateGroup = async (uid, group, order, previousMilestoneIds, currentWorkspaceRevision = 0) => {
+  const batch = writeBatch(db);
+  batch.set(getGroupRef(uid, group.id), mapGroupToFirestore(group, order), { merge: true });
+  queueWorkspaceRevisionUpdate(batch, uid);
+  await syncMilestonesForGroup(uid, group.id, group.milestones ?? [], {
+    mergeOnly: false,
+    previousMilestoneIds,
+  }, batch);
+  await batch.commit();
+  return normalizeWorkspaceRevision(currentWorkspaceRevision) + 1;
+};
+
+const deleteGroup = async (uid, groupId, milestoneIds = null, currentWorkspaceRevision = 0) => {
+  const batch = writeBatch(db);
+
+  if (Array.isArray(milestoneIds)) {
+    milestoneIds.forEach((milestoneId) => {
+      batch.delete(getMilestoneRef(uid, groupId, milestoneId));
+    });
+  } else {
+    const milestonesSnapshot = await getDocs(getMilestonesCollectionRef(uid, groupId));
+    milestonesSnapshot.forEach((docSnapshot) => {
+      batch.delete(docSnapshot.ref);
+    });
+  }
 
   batch.delete(getGroupRef(uid, groupId));
+  queueWorkspaceRevisionUpdate(batch, uid);
   await batch.commit();
-
-  return listGroups(uid);
+  return normalizeWorkspaceRevision(currentWorkspaceRevision) + 1;
 };
 
 const updateUserMigrationSource = async (uid, source) => {

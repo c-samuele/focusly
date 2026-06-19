@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 250 250" fill="none">
+  <path d="M207.17 58.17H103.69v47.47h90.6v35.85h-90.6v86.53H60.84V21.91h146.33V58.17Z" fill="#2C3438"/>
+  <path d="M207.17 51.17H103.69v47.47h90.6v35.85h-90.6v86.53H60.84V14.91h146.33V51.17Z" fill="url(#focuslyLightGradient)"/>
+  <defs>
+    <linearGradient id="focuslyLightGradient" x1="173.7625" y1="182.2652" x2="87.0563" y2="42.0268" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#90D6C5"/>
+      <stop offset="1" stop-color="#52C29D"/>
+    </linearGradient>
+  </defs>
+</svg>

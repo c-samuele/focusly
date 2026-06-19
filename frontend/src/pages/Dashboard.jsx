@@ -2,6 +2,7 @@
 // Compone layout adaptivo, dati derivati, analytics, gruppi, task e timer.
 import { useEffect, useMemo, useState } from 'react';
 import AnalyticsZone from '../components/Dashboard/AnalyticsZone';
+import GroupWorkspacePanel, { createWorkspaceState } from '../components/Group/GroupWorkspacePanel';
 import DashboardLayout from '../components/Layout/DashboardLayout';
 import Header from '../components/Layout/Header';
 import MainContent from '../components/Layout/MainContent';
@@ -16,6 +17,7 @@ import { useTaskTimer } from '../hooks/useTaskTimer';
 import { useTasks } from '../hooks/useTasks';
 import { analyticsService } from '../services/analyticsService';
 import { useAppStore } from '../state/store';
+import { applyThemeToDocument, getInitialTheme } from '../utils/themePreferences';
 
 const formatRemainingTime = (totalSeconds) => {
   const minutes = Math.floor(totalSeconds / 60);
@@ -30,27 +32,13 @@ const PRIORITY_ORDER = {
   low: 1,
 };
 
-const THEME_STORAGE_KEY = 'studyPlannerTheme';
-
-const getInitialTheme = () => {
-  if (typeof window === 'undefined') {
-    return 'light';
-  }
-
-  const storedTheme = window.localStorage.getItem(THEME_STORAGE_KEY);
-  if (storedTheme === 'light' || storedTheme === 'dark') {
-    return storedTheme;
-  }
-
-  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-};
-
 function Dashboard() {
   const { groups, selectedGroupId, createGroup, updateGroup, deleteGroup, selectGroup } = useGroups();
   const { tasks, allTasks, createTask, updateTask, deleteTask, toggleTaskComplete } = useTasks();
   const [editingTask, setEditingTask] = useState(null);
   const [isSyncModalOpen, setIsSyncModalOpen] = useState(false);
   const [theme, setTheme] = useState(getInitialTheme);
+  const [groupWorkspace, setGroupWorkspace] = useState(createWorkspaceState);
   const { isFullscreen, toggleFullscreen } = useFullscreen();
   const {
     sidebarOpen,
@@ -90,11 +78,12 @@ function Dashboard() {
   }, [setSidebarOpen]);
 
   useEffect(() => {
-    document.documentElement.dataset.theme = theme;
-    window.localStorage.setItem(THEME_STORAGE_KEY, theme);
+    applyThemeToDocument(theme);
   }, [theme]);
 
   const selectedGroup = groups.find((group) => group.id === selectedGroupId) ?? null;
+  const workspaceGroup = groups.find((group) => group.id === groupWorkspace.groupId) ?? null;
+  const activeTaskGroup = groups.find((group) => group.id === activeTask?.groupId) ?? null;
   const pendingTasks = tasks.filter((task) => !task.completed);
   const pendingTasksCount = allTasks.filter((task) => !task.completed).length;
   const completedTasksCount = allTasks.length - pendingTasksCount;
@@ -185,15 +174,61 @@ function Dashboard() {
       setEditingTask(null);
     }
 
+    if (groupWorkspace.groupId === groupId) {
+      setGroupWorkspace(createWorkspaceState());
+    }
+
     deleteGroup(groupId);
   };
 
   const handleSelectGroup = (groupId) => {
     selectGroup(groupId);
+    setGroupWorkspace(createWorkspaceState());
 
     if (typeof window !== 'undefined' && window.innerWidth <= 1024) {
       setSidebarOpen(false);
     }
+  };
+
+  const handleOpenCreateGroup = () => {
+    setActiveTab('tasks');
+    setGroupWorkspace({ mode: 'create', groupId: null });
+  };
+
+  const handleOpenEditGroup = (group) => {
+    setActiveTab('tasks');
+    setGroupWorkspace({ mode: 'edit', groupId: group.id });
+  };
+
+  const handleOpenGroupMilestones = (group) => {
+    setActiveTab('tasks');
+    setGroupWorkspace({ mode: 'milestones', groupId: group.id });
+  };
+
+  const handleCloseGroupWorkspace = () => {
+    setGroupWorkspace(createWorkspaceState());
+  };
+
+  const handleSubmitGroupWorkspace = (groupData) => {
+    if (groupWorkspace.mode === 'edit' && groupWorkspace.groupId) {
+      updateGroup(groupWorkspace.groupId, groupData);
+    } else {
+      createGroup(groupData);
+    }
+
+    setGroupWorkspace(createWorkspaceState());
+  };
+
+  const handleToggleWorkspaceMilestone = (index) => {
+    if (!workspaceGroup) {
+      return;
+    }
+
+    const updatedMilestones = (workspaceGroup.milestones ?? []).map((milestone, milestoneIndex) => (
+      milestoneIndex === index ? { ...milestone, completed: !milestone.completed } : milestone
+    ));
+
+    updateGroup(workspaceGroup.id, { milestones: updatedMilestones });
   };
 
   const handleShowAnalytics = () => {
@@ -203,6 +238,12 @@ function Dashboard() {
   const handleShowSettings = () => {
     setActiveTab('settings');
   };
+
+  useEffect(() => {
+    if (groupWorkspace.mode && groupWorkspace.mode !== 'create' && !workspaceGroup) {
+      setGroupWorkspace(createWorkspaceState());
+    }
+  }, [groupWorkspace.mode, workspaceGroup]);
 
   const getTimerLabel = (task) => formatRemainingTime(getTaskRemainingSeconds(task));
 
@@ -259,8 +300,9 @@ function Dashboard() {
             onClose={() => setSidebarOpen(false)}
             groups={groups}
             selectedGroupId={selectedGroupId}
-            onCreateGroup={createGroup}
-            onUpdateGroup={updateGroup}
+            onOpenCreateGroup={handleOpenCreateGroup}
+            onOpenEditGroup={handleOpenEditGroup}
+            onOpenViewMilestones={handleOpenGroupMilestones}
             onDeleteGroup={handleDeleteGroup}
             onSelectGroup={handleSelectGroup}
             taskCounts={taskCounts}
@@ -307,6 +349,15 @@ function Dashboard() {
                 onOpenSyncModal={handleOpenSyncModal}
                 onShowAnalytics={handleShowAnalytics}
               />
+            ) : groupWorkspace.mode ? (
+              <GroupWorkspacePanel
+                mode={groupWorkspace.mode}
+                group={workspaceGroup}
+                onSubmit={handleSubmitGroupWorkspace}
+                onCancel={handleCloseGroupWorkspace}
+                onToggleMilestone={handleToggleWorkspaceMilestone}
+                onEditGroup={(groupId) => setGroupWorkspace({ mode: 'edit', groupId })}
+              />
             ) : (
               <TaskList
                 groupName={selectedGroup?.name ?? 'Tasks'}
@@ -330,9 +381,11 @@ function Dashboard() {
               />
             )}
 
-            {activeTab !== 'settings' ? (
+            {activeTab !== 'settings' && !groupWorkspace.mode ? (
               <FocusTimerPanel
                 activeTask={activeTask}
+                activeGroupName={activeTaskGroup?.name ?? ''}
+                activeGroupColor={activeTaskGroup?.color ?? ''}
                 isRunning={isRunning}
                 activeTimerLabel={formatRemainingTime(remainingSeconds)}
                 onStartTimer={startTimer}

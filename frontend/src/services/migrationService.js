@@ -13,8 +13,8 @@ const isLocalSnapshotOwnedByAnotherUser = (uid) => {
 
 const getLocalSnapshot = () => storageService.getAppData();
 
-const migrateOnFirstLogin = async (uid) => {
-  const userProfile = await firestoreService.getUserProfile(uid);
+const migrateOnFirstLogin = async (uid, existingUserProfile = null) => {
+  const userProfile = existingUserProfile ?? await firestoreService.getUserProfile(uid);
 
   if (userProfile?.migration?.localStorageImported) {
     return {

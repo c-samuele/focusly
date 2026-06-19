@@ -151,6 +151,7 @@ export const mapUserProfileFromFirestore = (uid, data = {}) => ({
   photoURL: data.photoURL ?? '',
   createdAt: toIsoStringOrNull(data.createdAt),
   lastLoginAt: toIsoStringOrNull(data.lastLoginAt),
+  workspaceRevision: toNumberOrDefault(data.workspaceRevision, 0),
   migration: {
     localStorageImported: Boolean(data.migration?.localStorageImported),
     importedAt: toIsoStringOrNull(data.migration?.importedAt),

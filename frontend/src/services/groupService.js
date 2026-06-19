@@ -14,8 +14,9 @@ const createId = () => {
 
 const getGroups = async (uid) => firestoreService.listGroups(uid);
 
-const createGroupItem = async (uid, groupData) => {
-  const currentGroups = await getGroups(uid);
+const sortGroupsByOrder = (groups) => [...groups].sort((left, right) => left.order - right.order);
+
+const createGroupItem = async (uid, groupData, currentGroups = [], currentWorkspaceRevision = 0) => {
   const group = createGroup({
     ...groupData,
     id: createId(),
@@ -23,15 +24,27 @@ const createGroupItem = async (uid, groupData) => {
     order: currentGroups.length,
   });
 
-  return firestoreService.createGroup(uid, group, group.order);
+  const workspaceRevision = await firestoreService.createGroup(
+    uid,
+    group,
+    group.order,
+    currentWorkspaceRevision
+  );
+
+  return {
+    groups: sortGroupsByOrder([...currentGroups, group]),
+    workspaceRevision,
+  };
 };
 
-const updateGroupItem = async (uid, groupId, updates) => {
-  const groups = await getGroups(uid);
-  const groupToUpdate = groups.find((group) => group.id === groupId);
+const updateGroupItem = async (uid, groupId, updates, currentGroups = [], currentWorkspaceRevision = 0) => {
+  const groupToUpdate = currentGroups.find((group) => group.id === groupId);
 
   if (!groupToUpdate) {
-    return groups;
+    return {
+      groups: currentGroups,
+      workspaceRevision: currentWorkspaceRevision,
+    };
   }
 
   const nextGroup = createGroup({
@@ -41,10 +54,38 @@ const updateGroupItem = async (uid, groupId, updates) => {
     order: groupToUpdate.order,
   });
 
-  return firestoreService.updateGroup(uid, nextGroup, groupToUpdate.order);
+  const workspaceRevision = await firestoreService.updateGroup(
+    uid,
+    nextGroup,
+    groupToUpdate.order,
+    (groupToUpdate.milestones ?? []).map((milestone) => milestone.id),
+    currentWorkspaceRevision
+  );
+
+  return {
+    groups: sortGroupsByOrder(
+      currentGroups.map((group) => (group.id === groupId ? nextGroup : group))
+    ),
+    workspaceRevision,
+  };
 };
 
-const deleteGroupItem = (uid, groupId) => firestoreService.deleteGroup(uid, groupId);
+const deleteGroupItem = async (uid, groupId, currentGroups = [], currentWorkspaceRevision = 0) => {
+  const groupToDelete = currentGroups.find((group) => group.id === groupId);
+  const milestoneIds = (groupToDelete?.milestones ?? []).map((milestone) => milestone.id);
+
+  const workspaceRevision = await firestoreService.deleteGroup(
+    uid,
+    groupId,
+    milestoneIds,
+    currentWorkspaceRevision
+  );
+
+  return {
+    groups: sortGroupsByOrder(currentGroups.filter((group) => group.id !== groupId)),
+    workspaceRevision,
+  };
+};
 
 const getGroupStatus = (groupId, tasks) => {
   const groupTasks = tasks.filter((task) => task.groupId === groupId);
