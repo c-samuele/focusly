@@ -6,6 +6,7 @@ const FOCUS_TIMER_EXPANDED_KEY = 'focus-timer-expanded';
 const FOCUS_TIMER_POSITION_KEY = 'focus-timer-position';
 const FLOATING_MARGIN = 18;
 const DRAG_THRESHOLD = 6;
+const MOBILE_PANEL_MARGIN = 56;
 
 const getDefaultPosition = (panelWidth, panelHeight) => {
   if (typeof window === 'undefined') {
@@ -18,16 +19,26 @@ const getDefaultPosition = (panelWidth, panelHeight) => {
   };
 };
 
+const getViewportMargin = () => {
+  if (typeof window === 'undefined') {
+    return FLOATING_MARGIN;
+  }
+
+  return window.innerWidth <= 640 ? MOBILE_PANEL_MARGIN : FLOATING_MARGIN;
+};
+
 const clampPosition = (position, panelWidth, panelHeight) => {
   if (typeof window === 'undefined') {
     return position;
   }
 
+  const viewportMargin = getViewportMargin();
   const maxX = Math.max(FLOATING_MARGIN, window.innerWidth - panelWidth - FLOATING_MARGIN);
   const maxY = Math.max(FLOATING_MARGIN, window.innerHeight - panelHeight - FLOATING_MARGIN);
+  const minX = Math.min(FLOATING_MARGIN, Math.max(0, window.innerWidth - panelWidth - viewportMargin));
 
   return {
-    x: Math.min(Math.max(position.x, FLOATING_MARGIN), maxX),
+    x: Math.min(Math.max(position.x, minX), maxX),
     y: Math.min(Math.max(position.y, FLOATING_MARGIN), maxY),
   };
 };
@@ -64,6 +75,14 @@ const readStoredPosition = () => {
 };
 
 const isFocusActionTarget = (target) => target instanceof Element && Boolean(target.closest('[data-focus-action="true"]'));
+
+const getTouchById = (touchList, touchId) => {
+  if (!touchList || touchId === null || touchId === undefined) {
+    return null;
+  }
+
+  return Array.from(touchList).find((touch) => touch.identifier === touchId) ?? null;
+};
 
 function FocusTimerPanel({
   activeTask,
@@ -123,12 +142,121 @@ function FocusTimerPanel({
     };
   }, [isExpanded]);
 
+  useEffect(() => {
+    const updateDragPosition = (clientX, clientY) => {
+      if (!dragStateRef.current || !panelRef.current) {
+        return;
+      }
+
+      const distanceX = clientX - dragStateRef.current.startX;
+      const distanceY = clientY - dragStateRef.current.startY;
+
+      if (!dragStateRef.current.hasMoved) {
+        const distance = Math.hypot(distanceX, distanceY);
+
+        if (distance < DRAG_THRESHOLD) {
+          return;
+        }
+
+        dragStateRef.current.hasMoved = true;
+        draggedRef.current = true;
+        setIsDragging(true);
+      }
+
+      const nextWidth = panelRef.current.offsetWidth;
+      const nextHeight = panelRef.current.offsetHeight;
+
+      setPosition(clampPosition({
+        x: clientX - dragStateRef.current.offsetX,
+        y: clientY - dragStateRef.current.offsetY,
+      }, nextWidth, nextHeight));
+    };
+
+    const handleMouseMove = (event) => {
+      if (!dragStateRef.current || dragStateRef.current.inputType !== 'mouse') {
+        return;
+      }
+
+      event.preventDefault();
+      updateDragPosition(event.clientX, event.clientY);
+    };
+
+    const handleTouchMove = (event) => {
+      if (!dragStateRef.current || dragStateRef.current.inputType !== 'touch') {
+        return;
+      }
+
+      const touch = getTouchById(event.touches, dragStateRef.current.touchId);
+
+      if (!touch) {
+        return;
+      }
+
+      event.preventDefault();
+      updateDragPosition(touch.clientX, touch.clientY);
+    };
+
+    const handleMouseUp = () => {
+      if (!dragStateRef.current || dragStateRef.current.inputType !== 'mouse') {
+        return;
+      }
+
+      stopDragging();
+    };
+
+    const handleTouchEnd = (event) => {
+      if (!dragStateRef.current || dragStateRef.current.inputType !== 'touch') {
+        return;
+      }
+
+      const activeTouch = getTouchById(event.touches, dragStateRef.current.touchId);
+
+      if (activeTouch) {
+        return;
+      }
+
+      stopDragging();
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    window.addEventListener('touchmove', handleTouchMove, { passive: false });
+    window.addEventListener('touchend', handleTouchEnd);
+    window.addEventListener('touchcancel', handleTouchEnd);
+
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+      window.removeEventListener('touchmove', handleTouchMove);
+      window.removeEventListener('touchend', handleTouchEnd);
+      window.removeEventListener('touchcancel', handleTouchEnd);
+    };
+  }, []);
+
   const stopDragging = () => {
     dragStateRef.current = null;
     setIsDragging(false);
   };
 
-  const handlePointerDown = (event) => {
+  const startDragging = (clientX, clientY, inputType, touchId = null) => {
+    if (!panelRef.current) {
+      return;
+    }
+
+    const rect = panelRef.current.getBoundingClientRect();
+    draggedRef.current = false;
+    dragStateRef.current = {
+      inputType,
+      touchId,
+      startX: clientX,
+      startY: clientY,
+      offsetX: clientX - rect.left,
+      offsetY: clientY - rect.top,
+      hasMoved: false,
+    };
+  };
+
+  const handleMouseDown = (event) => {
     if (event.button !== 0) {
       return;
     }
@@ -137,62 +265,23 @@ function FocusTimerPanel({
       return;
     }
 
-    if (!panelRef.current) {
-      return;
-    }
-
-    const rect = panelRef.current.getBoundingClientRect();
-    draggedRef.current = false;
-    dragStateRef.current = {
-      pointerId: event.pointerId,
-      startX: event.clientX,
-      startY: event.clientY,
-      offsetX: event.clientX - rect.left,
-      offsetY: event.clientY - rect.top,
-      hasMoved: false,
-    };
-
-    panelRef.current.setPointerCapture?.(event.pointerId);
+    event.preventDefault();
+    startDragging(event.clientX, event.clientY, 'mouse');
   };
 
-  const handlePointerMove = (event) => {
-    if (!dragStateRef.current || dragStateRef.current.pointerId !== event.pointerId || !panelRef.current) {
+  const handleTouchStart = (event) => {
+    if (isFocusActionTarget(event.target)) {
       return;
     }
 
-    const distanceX = event.clientX - dragStateRef.current.startX;
-    const distanceY = event.clientY - dragStateRef.current.startY;
+    const touch = event.touches[0];
 
-    if (!dragStateRef.current.hasMoved) {
-      const distance = Math.hypot(distanceX, distanceY);
-
-      if (distance < DRAG_THRESHOLD) {
-        return;
-      }
-
-      dragStateRef.current.hasMoved = true;
-      draggedRef.current = true;
-      setIsDragging(true);
+    if (!touch) {
+      return;
     }
 
     event.preventDefault();
-
-    const nextWidth = panelRef.current.offsetWidth;
-    const nextHeight = panelRef.current.offsetHeight;
-
-    setPosition(clampPosition({
-      x: event.clientX - dragStateRef.current.offsetX,
-      y: event.clientY - dragStateRef.current.offsetY,
-    }, nextWidth, nextHeight));
-  };
-
-  const handlePointerUp = (event) => {
-    if (!dragStateRef.current || dragStateRef.current.pointerId !== event.pointerId) {
-      return;
-    }
-
-    panelRef.current?.releasePointerCapture?.(event.pointerId);
-    stopDragging();
+    startDragging(touch.clientX, touch.clientY, 'touch', touch.identifier);
   };
 
   const handlePanelClick = (event) => {
@@ -244,10 +333,8 @@ function FocusTimerPanel({
           isRunning ? 'floating-focus-timer--active' : '',
         ].filter(Boolean).join(' ')}
         style={{ ...floatingStyle, ...accentStyle }}
-        onPointerDown={handlePointerDown}
-        onPointerMove={handlePointerMove}
-        onPointerUp={handlePointerUp}
-        onPointerCancel={stopDragging}
+        onMouseDown={handleMouseDown}
+        onTouchStart={handleTouchStart}
         onClick={handlePanelClick}
       >
         <div className="floating-focus-timer__surface">

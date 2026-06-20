@@ -5140,15 +5140,15 @@ summary,
   }
 
   .floating-focus-timer {
-    width: min(340px, calc(100vw - 24px));
+    width: min(320px, calc(100vw - 56px));
   }
 
   .floating-focus-timer--compact {
-    width: min(220px, calc(100vw - 24px));
+    width: min(210px, calc(100vw - 56px));
   }
 
   .floating-focus-timer--expanded {
-    width: min(340px, calc(100vw - 24px));
+    width: min(320px, calc(100vw - 56px));
   }
 }
 
@@ -5177,6 +5177,18 @@ summary,
   .task-composer__milestone-button,
   .task-composer__footer-actions .button {
     width: 100%;
+  }
+
+  .floating-focus-timer {
+    width: min(280px, calc(100vw - 56px));
+  }
+
+  .floating-focus-timer--compact {
+    width: min(196px, calc(100vw - 56px));
+  }
+
+  .floating-focus-timer--expanded {
+    width: min(280px, calc(100vw - 56px));
   }
 
   .task-item {
@@ -5295,12 +5307,12 @@ summary,
   }
 
   .floating-focus-timer {
-    width: min(100vw - 24px, 320px);
+    width: min(100vw - 56px, 320px);
   }
 
   .floating-focus-timer--compact,
   .floating-focus-timer--expanded {
-    width: min(100vw - 24px, 320px);
+    width: min(100vw - 56px, 320px);
   }
 }
 

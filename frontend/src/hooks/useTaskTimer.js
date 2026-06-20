@@ -44,23 +44,67 @@ const playAlarm = () => {
 export const useTaskTimer = (tasks, onTimerComplete) => {
   const intervalRef = useRef(null);
   const completedSoundForRef = useRef('');
+  const onTimerCompleteRef = useRef(onTimerComplete);
+  const activeTaskIdRef = useRef('');
+  const activeTaskRef = useRef(null);
+  const isRunningRef = useRef(false);
+  const startTimeRef = useRef(null);
+  const pausedTimeRef = useRef(0);
+  const pauseStartTimeRef = useRef(null);
+  const totalDurationRef = useRef(0);
   const [activeTaskId, setActiveTaskId] = useState('');
   const [isRunning, setIsRunning] = useState(false);
-  // Usiamo timestamp per un timer preciso basato sul tempo reale
-  const [startTime, setStartTime] = useState(null); // quando il timer è iniziato
-  const [pausedTime, setPausedTime] = useState(0); // tempo totale in pausa (millisecondi)
-  const [pauseStartTime, setPauseStartTime] = useState(null); // quando è iniziata la pausa corrente
-  const [totalDuration, setTotalDuration] = useState(0); // durata totale del timer in secondi
   const [displaySeconds, setDisplaySeconds] = useState(0); // secondi visualizzati (aggiornati in tempo reale)
 
   // Calcola i secondi rimanenti basandosi sul tempo reale trascorso
-  const calculateRemainingSeconds = () => {
-    if (!startTime || !totalDuration) return 0;
-    
-    const now = Date.now();
-    const elapsed = now - startTime - pausedTime;
-    const remaining = Math.ceil((totalDuration * 1000 - elapsed) / 1000);
+  const calculateRemainingSeconds = (now = Date.now()) => {
+    if (!startTimeRef.current || !totalDurationRef.current) return 0;
+
+    const elapsedUntil = isRunningRef.current
+      ? now
+      : pauseStartTimeRef.current ?? now;
+    const elapsed = elapsedUntil - startTimeRef.current - pausedTimeRef.current;
+    const remaining = Math.ceil((totalDurationRef.current * 1000 - elapsed) / 1000);
     return Math.max(0, remaining);
+  };
+
+  const clearTimerInterval = () => {
+    window.clearInterval(intervalRef.current);
+    intervalRef.current = null;
+  };
+
+  const resetTimingRefs = () => {
+    startTimeRef.current = null;
+    pausedTimeRef.current = 0;
+    pauseStartTimeRef.current = null;
+    totalDurationRef.current = 0;
+  };
+
+  const resetTimerState = () => {
+    clearTimerInterval();
+    resetTimingRefs();
+    setActiveTaskId('');
+    setIsRunning(false);
+    setDisplaySeconds(0);
+  };
+
+  const completeTimer = () => {
+    const currentActiveTaskId = activeTaskIdRef.current;
+
+    if (!currentActiveTaskId || completedSoundForRef.current === currentActiveTaskId) {
+      resetTimerState();
+      return;
+    }
+
+    playAlarm();
+    completedSoundForRef.current = currentActiveTaskId;
+
+    const currentActiveTask = activeTaskRef.current;
+    if (currentActiveTask && !currentActiveTask.completed) {
+      onTimerCompleteRef.current?.(currentActiveTaskId);
+    }
+
+    resetTimerState();
   };
 
   const taskMap = useMemo(
@@ -75,17 +119,25 @@ export const useTaskTimer = (tasks, onTimerComplete) => {
   const activeTask = activeTaskId ? taskMap[activeTaskId] ?? null : null;
 
   useEffect(() => {
+    onTimerCompleteRef.current = onTimerComplete;
+  }, [onTimerComplete]);
+
+  useEffect(() => {
+    activeTaskIdRef.current = activeTaskId;
+  }, [activeTaskId]);
+
+  useEffect(() => {
+    activeTaskRef.current = activeTask;
+  }, [activeTask]);
+
+  useEffect(() => {
+    isRunningRef.current = isRunning;
+  }, [isRunning]);
+
+  useEffect(() => {
     if (activeTaskId && !taskMap[activeTaskId]) {
       // Se il task attivo sparisce o cambia gruppo, azzeriamo il timer in sicurezza.
-      window.clearInterval(intervalRef.current);
-      intervalRef.current = null;
-      setActiveTaskId('');
-      setIsRunning(false);
-      setStartTime(null);
-      setPausedTime(0);
-      setPauseStartTime(null);
-      setTotalDuration(0);
-      setDisplaySeconds(0);
+      resetTimerState();
     }
   }, [activeTaskId, taskMap]);
 
@@ -98,10 +150,10 @@ export const useTaskTimer = (tasks, onTimerComplete) => {
     const currentRemaining = calculateRemainingSeconds();
     if (currentRemaining > nextMax) {
       // Reset del timer se la durata è cambiata a un valore minore
-      setStartTime(Date.now());
-      setPausedTime(0);
-      setPauseStartTime(null);
-      setTotalDuration(nextMax);
+      startTimeRef.current = Date.now();
+      pausedTimeRef.current = 0;
+      pauseStartTimeRef.current = null;
+      totalDurationRef.current = nextMax;
       setDisplaySeconds(nextMax);
     }
   }, [activeTask]);
@@ -110,67 +162,44 @@ export const useTaskTimer = (tasks, onTimerComplete) => {
   // per evitare re-render inutilmente frequenti dell'intera dashboard.
   useEffect(() => {
     if (!activeTaskId || !isRunning) {
-      window.clearInterval(intervalRef.current);
-      intervalRef.current = null;
+      clearTimerInterval();
 
       const remaining = calculateRemainingSeconds();
       setDisplaySeconds((current) => (current === remaining ? current : remaining));
-      
-      // Il suono viene emesso una sola volta per completamento.
-      if (activeTaskId && remaining === 0 && completedSoundForRef.current !== activeTaskId) {
-        playAlarm();
-        completedSoundForRef.current = activeTaskId;
-        setIsRunning(false);
 
-        if (activeTask && !activeTask.completed) {
-          onTimerComplete?.(activeTaskId);
-        }
-
-        setActiveTaskId('');
-        setStartTime(null);
-        setPausedTime(0);
-        setPauseStartTime(null);
-        setTotalDuration(0);
-        setDisplaySeconds(0);
+      // Se il timer scade mentre siamo fuori dal loop, completiamolo comunque.
+      if (activeTaskId && remaining === 0) {
+        completeTimer();
       }
 
       return;
     }
 
     // Il timer mostra solo mm:ss: un tick al secondo e` sufficiente.
-    intervalRef.current = window.setInterval(() => {
+    const tick = () => {
       const remaining = calculateRemainingSeconds();
       setDisplaySeconds((current) => (current === remaining ? current : remaining));
-      
+
       // Quando il timer arriva a zero, triggeriamo il completamento
       if (remaining <= 0) {
-        window.clearInterval(intervalRef.current);
-        intervalRef.current = null;
+        clearTimerInterval();
         setDisplaySeconds(0);
-        
-        if (completedSoundForRef.current !== activeTaskId) {
-          playAlarm();
-          completedSoundForRef.current = activeTaskId;
-          setIsRunning(false);
-
-          if (activeTask && !activeTask.completed) {
-            onTimerComplete?.(activeTaskId);
-          }
-
-          setActiveTaskId('');
-          setStartTime(null);
-          setPausedTime(0);
-          setPauseStartTime(null);
-          setTotalDuration(0);
-        }
+        completeTimer();
       }
-    }, 1000);
+    };
+
+    tick();
+    const intervalId = window.setInterval(tick, 1000);
+    intervalRef.current = intervalId;
 
     return () => {
-      window.clearInterval(intervalRef.current);
-      intervalRef.current = null;
+      window.clearInterval(intervalId);
+
+      if (intervalRef.current === intervalId) {
+        intervalRef.current = null;
+      }
     };
-  }, [activeTask, activeTaskId, isRunning, onTimerComplete, startTime, pausedTime, totalDuration]);
+  }, [activeTaskId, isRunning]);
 
   const startTimer = (task) => {
     const durationSeconds = getDurationSeconds(task.timer);
@@ -183,45 +212,45 @@ export const useTaskTimer = (tasks, onTimerComplete) => {
     completedSoundForRef.current = '';
 
     if (activeTaskId !== task.id) {
+      clearTimerInterval();
+      startTimeRef.current = Date.now();
+      pausedTimeRef.current = 0;
+      pauseStartTimeRef.current = null;
+      totalDurationRef.current = durationSeconds;
       setActiveTaskId(task.id);
-      setTotalDuration(durationSeconds);
-      setStartTime(Date.now());
-      setPausedTime(0);
-      setPauseStartTime(null);
       setDisplaySeconds(durationSeconds);
       setIsRunning(true);
       return;
     }
 
     // Se era in pausa, riprendiamo
-    if (!isRunning && pauseStartTime !== null) {
+    if (!isRunning && pauseStartTimeRef.current !== null) {
       const now = Date.now();
-      setPausedTime(prev => prev + (now - pauseStartTime));
-      setPauseStartTime(null);
+      pausedTimeRef.current += now - pauseStartTimeRef.current;
+      pauseStartTimeRef.current = null;
     }
-    
+
     setIsRunning(true);
   };
 
   const pauseTimer = () => {
-    window.clearInterval(intervalRef.current);
-    intervalRef.current = null;
-    setPauseStartTime(Date.now());
+    clearTimerInterval();
+    pauseStartTimeRef.current = Date.now();
+    setDisplaySeconds(calculateRemainingSeconds(pauseStartTimeRef.current));
     setIsRunning(false);
   };
 
   const resetTimer = (task) => {
     const durationSeconds = getDurationSeconds(task.timer);
 
-    window.clearInterval(intervalRef.current);
-    intervalRef.current = null;
+    clearTimerInterval();
     completedSoundForRef.current = '';
 
     if (activeTaskId === task.id) {
-      setTotalDuration(durationSeconds);
-      setStartTime(Date.now());
-      setPausedTime(0);
-      setPauseStartTime(null);
+      startTimeRef.current = Date.now();
+      pausedTimeRef.current = 0;
+      pauseStartTimeRef.current = null;
+      totalDurationRef.current = durationSeconds;
       setDisplaySeconds(durationSeconds);
       setIsRunning(false);
     }
