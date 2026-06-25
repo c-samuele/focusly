@@ -13,22 +13,20 @@ const PERIOD_LABELS = {
   year: 'Year',
 };
 
-const formatScheduledLabel = (value, period) => {
-  const date = new Date(value);
+const formatCalendarBadge = (value) => {
+  const date = new Date(`${value}T12:00:00`);
 
   if (Number.isNaN(date.getTime())) {
-    return value;
+    return {
+      month: 'Date',
+      day: '--',
+    };
   }
 
-  if (period === 'year') {
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-  }
-
-  if (period === 'month' || period === 'week') {
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-  }
-
-  return date.toLocaleDateString('en-US', { weekday: 'short', day: 'numeric' });
+  return {
+    month: date.toLocaleDateString('en-US', { month: 'short' }),
+    day: date.toLocaleDateString('en-US', { day: '2-digit' }),
+  };
 };
 
 function StudyChart({
@@ -108,45 +106,47 @@ function StudyChart({
               <p className="analytics-card__meta">No open tasks scheduled in this period.</p>
             ) : (
               <div className="analytics-today-list">
-                {periodTasks.map((task) => (
-                  <article
-                    key={task.id}
-                    className={`analytics-today-item ${activeTaskId === task.id ? 'analytics-today-item--active' : ''}`}
-                    style={getGroupAccentStyle(task.groupColor)}
-                  >
-                    <div className="analytics-today-item__content">
-                      <div className="analytics-today-item__topline">
-                        <span className="analytics-today-item__group">{task.groupName}</span>
-                        <span className="analytics-today-item__date">{formatScheduledLabel(task.scheduledDate, period)}</span>
-                      </div>
-                      <p className="analytics-today-item__title">{task.title}</p>
-                      <div className="analytics-today-item__footer">
-                        <span className={`priority-badge priority-badge--${task.priority}`}>{task.priority}</span>
-                        <small className="analytics-today-item__timer">
-                          <i className="bi bi-clock" aria-hidden="true" /> {task.timer} min
-                        </small>
-                      </div>
-                    </div>
+                {periodTasks.map((task) => {
+                  const { month, day } = formatCalendarBadge(task.scheduledDate);
 
-                    <Button
-                      variant={isRunning && activeTaskId === task.id ? 'ghost' : 'primary'}
-                      className="icon-button analytics-today-item__play"
-                      onClick={() => (
-                        isRunning && activeTaskId === task.id
-                          ? onPauseTimer?.()
-                          : onStartTimer?.(task)
-                      )}
-                      disabled={task.timer <= 0}
-                      aria-label={isRunning && activeTaskId === task.id ? 'Metti in pausa timer' : 'Avvia timer del task'}
-                      title={isRunning && activeTaskId === task.id ? 'Metti in pausa timer' : 'Avvia timer del task'}
+                  return (
+                    <article
+                      key={task.id}
+                      className={`analytics-today-item ${activeTaskId === task.id ? 'analytics-today-item--active' : ''}`}
+                      style={getGroupAccentStyle(task.groupColor)}
                     >
-                      <i
-                        className={`bi ${isRunning && activeTaskId === task.id ? 'bi-pause-fill' : 'bi-play-fill'}`}
-                        aria-hidden="true"
-                      />
-                    </Button>
-                  </article>
-                ))}
+                      <div className="analytics-today-item__date-badge" aria-hidden="true">
+                        <span>{month}</span>
+                        <strong>{day}</strong>
+                      </div>
+
+                      <div className="analytics-today-item__content">
+                        <span className="analytics-today-item__group">
+                          <span className="analytics-today-item__group-label">{task.groupName}</span>
+                        </span>
+                        <p className="analytics-today-item__title">{task.title}</p>
+                      </div>
+
+                      <Button
+                        variant={isRunning && activeTaskId === task.id ? 'ghost' : 'primary'}
+                        className="icon-button analytics-today-item__play"
+                        onClick={() => (
+                          isRunning && activeTaskId === task.id
+                            ? onPauseTimer?.()
+                            : onStartTimer?.(task)
+                        )}
+                        disabled={task.timer <= 0}
+                        aria-label={isRunning && activeTaskId === task.id ? 'Metti in pausa timer' : 'Avvia timer del task'}
+                        title={isRunning && activeTaskId === task.id ? 'Metti in pausa timer' : 'Avvia timer del task'}
+                      >
+                        <i
+                          className={`bi ${isRunning && activeTaskId === task.id ? 'bi-pause-fill' : 'bi-play-fill'}`}
+                          aria-hidden="true"
+                        />
+                      </Button>
+                    </article>
+                  );
+                })}
               </div>
             )}
           </div>

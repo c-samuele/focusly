@@ -33,7 +33,7 @@ const PRIORITY_ORDER = {
 };
 
 function Dashboard() {
-  const { groups, selectedGroupId, createGroup, updateGroup, deleteGroup, selectGroup } = useGroups();
+  const { groups, selectedGroupId, createGroup, updateGroup, deleteGroup, reorderGroups, selectGroup } = useGroups();
   const { tasks, allTasks, createTask, updateTask, deleteTask, toggleTaskComplete } = useTasks();
   const [editingTask, setEditingTask] = useState(null);
   const [isSyncModalOpen, setIsSyncModalOpen] = useState(false);
@@ -64,6 +64,7 @@ function Dashboard() {
     startTimer,
     pauseTimer,
     resetTimer,
+    extendTimer,
     getTaskRemainingSeconds,
   } = useTaskTimer(allTasks, toggleTaskComplete);
 
@@ -82,11 +83,25 @@ function Dashboard() {
     applyThemeToDocument(theme);
   }, [theme]);
 
-  const selectedGroup = groups.find((group) => group.id === selectedGroupId) ?? null;
-  const workspaceGroup = groups.find((group) => group.id === groupWorkspace.groupId) ?? null;
-  const activeTaskGroup = groups.find((group) => group.id === activeTask?.groupId) ?? null;
-  const pendingTasks = tasks.filter((task) => !task.completed);
-  const pendingTasksCount = allTasks.filter((task) => !task.completed).length;
+  const groupsById = useMemo(
+    () => Object.fromEntries(groups.map((group) => [group.id, group])),
+    [groups]
+  );
+
+  const selectedGroup = selectedGroupId ? (groupsById[selectedGroupId] ?? null) : null;
+  const workspaceGroup = groupWorkspace.groupId ? (groupsById[groupWorkspace.groupId] ?? null) : null;
+  const activeTaskGroup = activeTask?.groupId ? (groupsById[activeTask.groupId] ?? null) : null;
+
+  const pendingTasks = useMemo(
+    () => tasks.filter((task) => !task.completed),
+    [tasks]
+  );
+
+  const pendingTasksCount = useMemo(
+    () => allTasks.filter((task) => !task.completed).length,
+    [allTasks]
+  );
+
   const completedTasksCount = allTasks.length - pendingTasksCount;
 
   const periodTasks = useMemo(
@@ -101,8 +116,8 @@ function Dashboard() {
         ))
         .map((task) => ({
           ...task,
-          groupName: groups.find((group) => group.id === task.groupId)?.name ?? 'No Group',
-          groupColor: groups.find((group) => group.id === task.groupId)?.color,
+          groupName: groupsById[task.groupId]?.name ?? 'No Group',
+          groupColor: groupsById[task.groupId]?.color,
         }))
         .sort((left, right) => {
           const dateDiff = left.scheduledDate.localeCompare(right.scheduledDate);
@@ -123,7 +138,7 @@ function Dashboard() {
           return left.title.localeCompare(right.title);
         });
     },
-    [allTasks, analyticsReferenceDate, groups, statsPeriod]
+    [allTasks, analyticsReferenceDate, groupsById, statsPeriod]
   );
 
   const studyStats = useMemo(
@@ -145,10 +160,13 @@ function Dashboard() {
     [allTasks, analyticsReferenceDate, statsPeriod]
   );
 
-  const taskCounts = allTasks.filter((task) => !task.completed).reduce((counts, task) => {
-    counts[task.groupId] = (counts[task.groupId] ?? 0) + 1;
-    return counts;
-  }, {});
+  const taskCounts = useMemo(
+    () => allTasks.filter((task) => !task.completed).reduce((counts, task) => {
+      counts[task.groupId] = (counts[task.groupId] ?? 0) + 1;
+      return counts;
+    }, {}),
+    [allTasks]
+  );
 
   const handleCreateTask = (taskData) => {
     if (!selectedGroupId) {
@@ -189,6 +207,10 @@ function Dashboard() {
     }
 
     deleteGroup(groupId);
+  };
+
+  const handleReorderGroups = (nextGroups) => {
+    reorderGroups(nextGroups);
   };
 
   const handleSelectGroup = (groupId) => {
@@ -320,6 +342,7 @@ function Dashboard() {
             onOpenEditGroup={handleOpenEditGroup}
             onOpenViewMilestones={handleOpenGroupMilestones}
             onDeleteGroup={handleDeleteGroup}
+            onReorderGroups={handleReorderGroups}
             onSelectGroup={handleSelectGroup}
             taskCounts={taskCounts}
           />
@@ -410,6 +433,7 @@ function Dashboard() {
                 onStartTimer={startTimer}
                 onPauseTimer={pauseTimer}
                 onResetTimer={resetTimer}
+                onExtendTimer={extendTimer}
               />
             ) : null}
           </MainContent>

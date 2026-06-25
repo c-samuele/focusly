@@ -329,6 +329,22 @@ const deleteGroup = async (uid, groupId, milestoneIds = null, currentWorkspaceRe
   return normalizeWorkspaceRevision(currentWorkspaceRevision) + 1;
 };
 
+const reorderGroups = async (uid, groups = [], currentWorkspaceRevision = 0) => {
+  const batch = writeBatch(db);
+
+  groups.forEach((group, index) => {
+    batch.set(
+      getGroupRef(uid, group.id),
+      mapGroupToFirestore(group, index),
+      { merge: true }
+    );
+  });
+
+  queueWorkspaceRevisionUpdate(batch, uid);
+  await batch.commit();
+  return normalizeWorkspaceRevision(currentWorkspaceRevision) + 1;
+};
+
 const updateUserMigrationSource = async (uid, source) => {
   await updateDoc(getUserRef(uid), {
     'migration.source': source,
@@ -349,6 +365,7 @@ export const firestoreService = {
   listTasks,
   loadUserData,
   markMigrationComplete,
+  reorderGroups,
   updateGroup,
   updateTask,
   updateUserMigrationSource,

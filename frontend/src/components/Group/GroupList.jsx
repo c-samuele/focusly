@@ -5,6 +5,24 @@ import { createPortal } from 'react-dom';
 import Button from '../UI/Button';
 import GroupItem from './GroupItem';
 
+const reorderGroupItems = (groups, draggedGroupId, targetGroupId) => {
+  if (!draggedGroupId || !targetGroupId || draggedGroupId === targetGroupId) {
+    return groups;
+  }
+
+  const draggedIndex = groups.findIndex((group) => group.id === draggedGroupId);
+  const targetIndex = groups.findIndex((group) => group.id === targetGroupId);
+
+  if (draggedIndex === -1 || targetIndex === -1) {
+    return groups;
+  }
+
+  const nextGroups = [...groups];
+  const [draggedGroup] = nextGroups.splice(draggedIndex, 1);
+  nextGroups.splice(targetIndex, 0, draggedGroup);
+  return nextGroups;
+};
+
 function GroupList({
   groups,
   selectedGroupId,
@@ -12,10 +30,13 @@ function GroupList({
   onOpenEditGroup,
   onOpenViewMilestones,
   onDeleteGroup,
+  onReorderGroups,
   onSelectGroup,
   taskCounts,
 }) {
   const [groupToDelete, setGroupToDelete] = useState(null);
+  const [draggedGroupId, setDraggedGroupId] = useState('');
+  const [dropTargetGroupId, setDropTargetGroupId] = useState('');
 
   const handleCreate = () => {
     onOpenCreateGroup();
@@ -37,6 +58,35 @@ function GroupList({
 
     onDeleteGroup(groupToDelete.id);
     setGroupToDelete(null);
+  };
+
+  const handleDragStart = (groupId) => {
+    setDraggedGroupId(groupId);
+    setDropTargetGroupId('');
+  };
+
+  const handleDragEnter = (groupId) => {
+    if (!draggedGroupId || draggedGroupId === groupId) {
+      return;
+    }
+
+    setDropTargetGroupId(groupId);
+  };
+
+  const handleDragEnd = () => {
+    setDraggedGroupId('');
+    setDropTargetGroupId('');
+  };
+
+  const handleDrop = (targetGroupId) => {
+    if (!draggedGroupId || draggedGroupId === targetGroupId) {
+      handleDragEnd();
+      return;
+    }
+
+    const nextGroups = reorderGroupItems(groups, draggedGroupId, targetGroupId);
+    handleDragEnd();
+    onReorderGroups?.(nextGroups);
   };
 
   return (
@@ -68,10 +118,16 @@ function GroupList({
               key={group.id}
               group={group}
               isSelected={group.id === selectedGroupId}
+              isDragging={group.id === draggedGroupId}
+              isDropTarget={group.id === dropTargetGroupId}
               onSelect={onSelectGroup}
               onDelete={handleRequestDelete}
               onEdit={onOpenEditGroup}
               onViewMilestones={onOpenViewMilestones}
+              onDragStart={handleDragStart}
+              onDragEnter={handleDragEnter}
+              onDragEnd={handleDragEnd}
+              onDrop={handleDrop}
               taskCount={taskCounts[group.id] ?? 0}
             />
           ))

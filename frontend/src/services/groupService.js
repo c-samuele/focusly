@@ -87,6 +87,24 @@ const deleteGroupItem = async (uid, groupId, currentGroups = [], currentWorkspac
   };
 };
 
+const reorderGroups = async (uid, nextGroups = [], currentWorkspaceRevision = 0) => {
+  const reorderedGroups = nextGroups.map((group, index) => createGroup({
+    ...group,
+    order: index,
+  }));
+
+  const workspaceRevision = await firestoreService.reorderGroups(
+    uid,
+    reorderedGroups,
+    currentWorkspaceRevision
+  );
+
+  return {
+    groups: sortGroupsByOrder(reorderedGroups),
+    workspaceRevision,
+  };
+};
+
 const getGroupStatus = (groupId, tasks) => {
   const groupTasks = tasks.filter((task) => task.groupId === groupId);
   const todaysTasks = groupTasks.filter((task) => task.scheduledDate === getTodayDate());
@@ -121,6 +139,7 @@ export const groupService = {
   createGroup: createGroupItem,
   updateGroup: updateGroupItem,
   deleteGroup: deleteGroupItem,
+  reorderGroups,
   getGroupStatus,
   attachStatuses,
 };

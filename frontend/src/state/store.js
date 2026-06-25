@@ -420,6 +420,38 @@ export const useAppStore = create((set, get) => ({
     }
   },
 
+  reorderGroups: async (nextGroups) => {
+    const { authUser, tasks, workspaceRevision } = get();
+    if (!authUser || !Array.isArray(nextGroups) || nextGroups.length === 0) {
+      return;
+    }
+
+    try {
+      const nextGroupState = await groupService.reorderGroups(
+        authUser.uid,
+        nextGroups,
+        workspaceRevision
+      );
+
+      set((state) => {
+        const refreshedGroups = refreshGroups(nextGroupState.groups, tasks);
+        syncLocalBackup(authUser.uid, tasks, refreshedGroups, nextGroupState.workspaceRevision);
+
+        return {
+          groups: refreshedGroups,
+          workspaceRevision: nextGroupState.workspaceRevision,
+          selectedGroupId: state.selectedGroupId,
+          appError: '',
+        };
+      });
+    } catch (error) {
+      console.error('Reorder groups failed', error);
+      set({
+        appError: error instanceof Error ? error.message : 'Reorder groups failed',
+      });
+    }
+  },
+
   createTask: async (taskData) => {
     const { authUser, tasks: currentTasks, workspaceRevision } = get();
     if (!authUser) {

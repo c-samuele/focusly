@@ -13,6 +13,7 @@ function Sidebar({
   onOpenEditGroup,
   onOpenViewMilestones,
   onDeleteGroup,
+  onReorderGroups,
   onSelectGroup,
   taskCounts,
 }) {
@@ -64,6 +65,7 @@ function Sidebar({
           onOpenEditGroup={onOpenEditGroup}
           onOpenViewMilestones={onOpenViewMilestones}
           onDeleteGroup={onDeleteGroup}
+          onReorderGroups={onReorderGroups}
           onSelectGroup={onSelectGroup}
           taskCounts={taskCounts}
         />

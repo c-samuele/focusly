@@ -39,16 +39,7 @@ function Header({
         <BrandLogo subtitle="Focus Workspace" className="dashboard-header__logo" size="sm" />
       </div>
 
-      <Button
-        variant={activeTab === 'analytics' ? 'primary' : 'ghost'}
-        className="dashboard-header__section-button"
-        onClick={onShowAnalytics}
-        aria-label="Apri analytics dashboard"
-        title="Apri analytics dashboard"
-      >
-        <i className="bi bi-bar-chart-line-fill" aria-hidden="true" />
-        <span>Analytics</span>
-      </Button>
+      
 
       <div className="dashboard-header__actions" aria-label="Azioni header">
         <div className="dashboard-header__account">
@@ -70,6 +61,16 @@ function Header({
             <span>{authUser?.email || 'Authenticated session'}</span>
           </div>
         </div>
+
+        <Button
+          variant={activeTab === 'analytics' ? 'primary' : 'ghost'}
+          className="dashboard-header__tool-button dashboard-header__analytics-button icon-button"
+          onClick={onShowAnalytics}
+          aria-label="Apri analytics dashboard"
+          title="Apri analytics dashboard"
+        >
+          <i className="bi bi-bar-chart-line-fill" aria-hidden="true" />
+        </Button>
 
         <Button
           variant={activeTab === 'settings' ? 'primary' : 'ghost'}

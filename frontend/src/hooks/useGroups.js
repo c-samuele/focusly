@@ -7,6 +7,7 @@ export const useGroups = () => {
   const createGroup = useAppStore((state) => state.createGroup);
   const updateGroup = useAppStore((state) => state.updateGroup);
   const deleteGroup = useAppStore((state) => state.deleteGroup);
+  const reorderGroups = useAppStore((state) => state.reorderGroups);
   const selectGroup = useAppStore((state) => state.selectGroup);
 
   return {
@@ -15,6 +16,7 @@ export const useGroups = () => {
     createGroup,
     updateGroup,
     deleteGroup,
+    reorderGroups,
     selectGroup,
   };
 };

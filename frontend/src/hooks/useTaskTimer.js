@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 const getDurationSeconds = (minutes) => Math.max(0, Number(minutes) || 0) * 60;
-
 const playAlarm = () => {
   if (typeof window === 'undefined') {
     return;
@@ -146,6 +145,11 @@ export const useTaskTimer = (tasks, onTimerComplete) => {
       return;
     }
 
+    if (activeTask.completed) {
+      resetTimerState();
+      return;
+    }
+
     const nextMax = getDurationSeconds(activeTask.timer);
     const currentRemaining = calculateRemainingSeconds();
     if (currentRemaining > nextMax) {
@@ -204,7 +208,7 @@ export const useTaskTimer = (tasks, onTimerComplete) => {
   const startTimer = (task) => {
     const durationSeconds = getDurationSeconds(task.timer);
 
-    if (!durationSeconds) {
+    if (!durationSeconds || task.completed) {
       return;
     }
 
@@ -243,17 +247,40 @@ export const useTaskTimer = (tasks, onTimerComplete) => {
   const resetTimer = (task) => {
     const durationSeconds = getDurationSeconds(task.timer);
 
+    if (!durationSeconds || task.completed) {
+      return;
+    }
+
     clearTimerInterval();
     completedSoundForRef.current = '';
+    startTimeRef.current = Date.now();
+    pausedTimeRef.current = 0;
+    pauseStartTimeRef.current = null;
+    totalDurationRef.current = durationSeconds;
+    setActiveTaskId(task.id);
+    setDisplaySeconds(durationSeconds);
+    setIsRunning(false);
+  };
 
-    if (activeTaskId === task.id) {
-      startTimeRef.current = Date.now();
-      pausedTimeRef.current = 0;
-      pauseStartTimeRef.current = null;
-      totalDurationRef.current = durationSeconds;
-      setDisplaySeconds(durationSeconds);
-      setIsRunning(false);
+  const extendTimer = (task, minutesToAdd = 30) => {
+    if (!task || task.id !== activeTaskIdRef.current || task.completed) {
+      return;
     }
+
+    const additionalSeconds = Math.max(0, Number(minutesToAdd) || 0) * 60;
+
+    if (!additionalSeconds) {
+      return;
+    }
+
+    const remaining = calculateRemainingSeconds();
+
+    if (remaining <= 0) {
+      return;
+    }
+
+    totalDurationRef.current += additionalSeconds;
+    setDisplaySeconds(remaining + additionalSeconds);
   };
 
   const getTaskRemainingSeconds = (task) => {
@@ -272,6 +299,7 @@ export const useTaskTimer = (tasks, onTimerComplete) => {
     startTimer,
     pauseTimer,
     resetTimer,
+    extendTimer,
     getTaskRemainingSeconds,
   };
 };

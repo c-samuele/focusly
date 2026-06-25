@@ -8,7 +8,7 @@ const FLOATING_MARGIN = 18;
 const DRAG_THRESHOLD = 6;
 const MOBILE_PANEL_MARGIN = 56;
 
-const getDefaultPosition = (panelWidth, panelHeight) => {
+const getDefaultPosition = (panelWidth = 380, panelHeight = 300) => {
   if (typeof window === 'undefined') {
     return { x: FLOATING_MARGIN, y: FLOATING_MARGIN };
   }
@@ -93,12 +93,13 @@ function FocusTimerPanel({
   onStartTimer,
   onPauseTimer,
   onResetTimer,
+  onExtendTimer,
 }) {
   const panelRef = useRef(null);
   const dragStateRef = useRef(null);
   const draggedRef = useRef(false);
   const [isExpanded, setIsExpanded] = useState(readStoredExpanded);
-  const [position, setPosition] = useState(readStoredPosition);
+  const [position, setPosition] = useState(() => readStoredPosition() ?? getDefaultPosition());
   const [isDragging, setIsDragging] = useState(false);
 
   useEffect(() => {
@@ -314,11 +315,13 @@ function FocusTimerPanel({
 
   const floatingStyle = position
     ? { left: `${position.x}px`, top: `${position.y}px` }
-    : undefined;
+    : { left: `${FLOATING_MARGIN}px`, top: `${FLOATING_MARGIN}px` };
 
   const timerLabel = 'Focus Timer';
   const showBackdrop = isRunning && isExpanded;
   const accentStyle = activeTask && activeGroupColor ? getGroupAccentStyle(activeGroupColor) : undefined;
+  const hasActiveSession = Boolean(activeTask);
+  const compactSummary = hasActiveSession ? activeTimerLabel : 'Idle';
 
   return (
     <>
@@ -359,7 +362,8 @@ function FocusTimerPanel({
 
             {!isExpanded ? (
               <div className="floating-focus-timer__compact-content">
-                <strong>{activeTimerLabel}</strong>
+                <strong>{compactSummary}</strong>
+                {activeTask ? <span className="floating-focus-timer__compact-status">{activeTask.title}</span> : null}
               </div>
             ) : null}
           </div>
@@ -368,7 +372,10 @@ function FocusTimerPanel({
             <div className={`focus-timer-card ${activeTask ? '' : 'focus-timer-card--idle'}`.trim()}>
               {activeTask ? (
                 <div className="focus-timer-card__header">
-                  <span className="focus-timer-card__planned">{activeTask.timer} min plan</span>
+                  <div className="focus-timer-card__header-copy">
+                    <span className="focus-timer-card__planned">{activeTask.timer} min plan</span>
+                    {activeGroupName ? <span className="focus-timer-card__group">{activeGroupName}</span> : null}
+                  </div>
                 </div>
               ) : null}
 
@@ -378,9 +385,11 @@ function FocusTimerPanel({
                 {activeTask?.note || (activeTask ? 'Stay on this block until the timer rings.' : 'The timer follows the selected task and stays visible while you work.')}
               </p>
 
-              <div className="focus-timer-card__time-row">
-                <div className="focus-timer-card__time">{activeTimerLabel}</div>
-              </div>
+              {activeTask ? (
+                <div className="focus-timer-card__time-row">
+                  <div className="focus-timer-card__time">{activeTimerLabel}</div>
+                </div>
+              ) : null}
 
               <div className="focus-timer-card__actions" data-no-drag="true">
                 <Button
@@ -395,6 +404,23 @@ function FocusTimerPanel({
                 >
                   <i className={`bi ${isRunning ? 'bi-pause-fill' : 'bi-play-fill'}`} aria-hidden="true" />
                   {isRunning ? 'Pause' : 'Start'}
+                </Button>
+
+                <Button
+                  variant="ghost"
+                  className="floating-focus-timer__action"
+                  onClick={(event) => {
+                    event.stopPropagation();
+
+                    if (activeTask) {
+                      onExtendTimer(activeTask);
+                    }
+                  }}
+                  disabled={!activeTask}
+                  data-focus-action="true"
+                >
+                  <i className="bi bi-plus-circle" aria-hidden="true" />
+                  +30 min
                 </Button>
 
                 <Button

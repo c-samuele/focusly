@@ -13,7 +13,21 @@ const STATUS_LABELS = {
   completed: 'Completed',
 };
 
-function GroupItem({ group, isSelected, onSelect, onDelete, onEdit, onViewMilestones, taskCount }) {
+function GroupItem({
+  group,
+  isSelected,
+  isDragging,
+  isDropTarget,
+  onSelect,
+  onDelete,
+  onEdit,
+  onViewMilestones,
+  onDragStart,
+  onDragEnter,
+  onDragEnd,
+  onDrop,
+  taskCount,
+}) {
   const milestones = group.milestones ?? [];
   const totalMilestones = milestones.length;
   const completedMilestones = milestones.filter((milestone) => milestone.completed).length;
@@ -28,7 +42,33 @@ function GroupItem({ group, isSelected, onSelect, onDelete, onEdit, onViewMilest
   const groupTypeLabel = GROUP_TYPE_LABELS[groupType] ?? groupType;
 
   return (
-    <article className={`group-item ${isSelected ? 'group-item--selected' : ''}`}>
+    <article
+      className={[
+        'group-item',
+        isSelected ? 'group-item--selected' : '',
+        isDragging ? 'group-item--dragging' : '',
+        isDropTarget ? 'group-item--drop-target' : '',
+      ].filter(Boolean).join(' ')}
+      draggable="true"
+      onDragStart={(event) => {
+        event.dataTransfer.effectAllowed = 'move';
+        event.dataTransfer.setData('text/plain', group.id);
+        onDragStart?.(group.id);
+      }}
+      onDragEnter={(event) => {
+        event.preventDefault();
+        onDragEnter?.(group.id);
+      }}
+      onDragOver={(event) => {
+        event.preventDefault();
+        event.dataTransfer.dropEffect = 'move';
+      }}
+      onDragEnd={onDragEnd}
+      onDrop={(event) => {
+        event.preventDefault();
+        onDrop?.(group.id);
+      }}
+    >
       <button type="button" className="group-item__content" onClick={handleSelect}>
         <div className="group-item__eyebrow">
           <span className="group-item__eyebrow-label" style={accentStyle}>

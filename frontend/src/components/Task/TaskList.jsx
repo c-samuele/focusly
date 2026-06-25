@@ -1,16 +1,23 @@
 // Area centrale dedicata ai task.
-// Organizza overview, focus panel, modal di creazione/modifica e board To Do / Completed.
-import { useEffect, useMemo, useState } from 'react';
+// Organizza overview, modal di creazione/modifica e board To Do / Completed.
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { getTodayDate } from '../../model/Task';
 import {
+  addDaysToDateKey,
+  addMonthsToDateKey,
+  formatDayLabel,
+  formatMonthLabel,
+  getMonthStartKey,
+  isSameMonthKey,
+} from '../../utils/taskDateRange';
+import {
   getGroupAccentStyle,
-  GROUP_TYPE_LABELS,
-  normalizeGroupType,
 } from '../../utils/groupAppearance';
 import Button from '../UI/Button';
-import TaskCompletedSection from './TaskCompletedSection';
 import TaskForm from './TaskForm';
-import TaskTodoSection from './TaskTodoSection';
+import TaskSection from './TaskSection';
+
+const WEEKDAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
 const PRIORITY_ORDER = {
   high: 3,
@@ -18,11 +25,12 @@ const PRIORITY_ORDER = {
   low: 1,
 };
 
-const GROUP_STATUS_LABELS = {
-  inactive: 'Planning',
-  in_progress: 'In progress',
-  completed: 'Completed',
+const parseDateKey = (value) => {
+  const date = new Date(`${value}T12:00:00`);
+  return Number.isNaN(date.getTime()) ? new Date(`${getTodayDate()}T12:00:00`) : date;
 };
+
+const getCompletedDateKey = (task) => task.completedAt?.slice(0, 10) ?? task.scheduledDate ?? '';
 
 const sortTasksForFocus = (left, right) => {
   const dateDiff = left.scheduledDate.localeCompare(right.scheduledDate);
@@ -38,6 +46,111 @@ const sortTasksForFocus = (left, right) => {
   }
 
   return left.title.localeCompare(right.title);
+};
+
+const sortCompletedTasks = (left, right) => {
+  const dateDiff = getCompletedDateKey(right).localeCompare(getCompletedDateKey(left));
+
+  if (dateDiff !== 0) {
+    return dateDiff;
+  }
+
+  const timeDiff = String(right.completedAt ?? '').localeCompare(String(left.completedAt ?? ''));
+
+  if (timeDiff !== 0) {
+    return timeDiff;
+  }
+
+  const priorityDiff = PRIORITY_ORDER[right.priority] - PRIORITY_ORDER[left.priority];
+
+  if (priorityDiff !== 0) {
+    return priorityDiff;
+  }
+
+  return left.title.localeCompare(right.title);
+};
+
+const getMonthMatrix = (monthKey) => {
+  const monthStartKey = getMonthStartKey(monthKey);
+  const monthStartDate = parseDateKey(monthStartKey);
+  const monthIndex = monthStartDate.getMonth();
+  const firstDay = monthStartDate.getDay();
+  const offset = firstDay === 0 ? 6 : firstDay - 1;
+  const gridStart = new Date(monthStartDate);
+  gridStart.setDate(gridStart.getDate() - offset);
+
+  return Array.from({ length: 6 }, (_, weekIndex) => (
+    Array.from({ length: 7 }, (_, dayIndex) => {
+      const nextDate = new Date(gridStart);
+      nextDate.setDate(gridStart.getDate() + weekIndex * 7 + dayIndex);
+      const key = `${nextDate.getFullYear()}-${String(nextDate.getMonth() + 1).padStart(2, '0')}-${String(nextDate.getDate()).padStart(2, '0')}`;
+
+      return {
+        key,
+        dayNumber: nextDate.getDate(),
+        isCurrentMonth: nextDate.getMonth() === monthIndex,
+      };
+    })
+  ));
+};
+
+const getSummaryMeta = ({ view, pendingTasks, completedTasks, overdueCount, today }) => {
+  if (view === 'completed') {
+    const completedTodayCount = completedTasks.filter((task) => getCompletedDateKey(task) === today).length;
+    const monthStart = getMonthStartKey(today);
+    const completedThisMonthCount = completedTasks.filter((task) => {
+      const completedDate = getCompletedDateKey(task);
+      return completedDate && isSameMonthKey(completedDate, monthStart);
+    }).length;
+
+    return [
+      { icon: 'bi-check2-circle', value: completedTasks.length, label: 'Done' },
+      { icon: 'bi-sun', value: completedTodayCount, label: 'Today' },
+      { icon: 'bi-calendar2-month', value: completedThisMonthCount, label: 'Month' },
+    ];
+  }
+
+  const plannedAheadCount = pendingTasks.filter((task) => task.scheduledDate > today).length;
+
+  return [
+    { icon: 'bi-list-task', value: pendingTasks.length, label: 'Open' },
+    { icon: 'bi-arrow-up-right-circle', value: plannedAheadCount, label: 'Ahead' },
+    { icon: 'bi-exclamation-circle', value: overdueCount, label: 'Overdue' },
+  ];
+};
+
+const getPeriodMeta = ({ view, anchorDate, quickMode }) => {
+  if (quickMode === 'overdue') {
+    return {
+      caption: 'Attention now',
+      label: 'Overdue tasks',
+      description: 'Past scheduled tasks still open and waiting for a focused recovery block.',
+    };
+  }
+
+  return {
+    caption: view === 'completed' ? 'Completed on' : 'Scheduled for',
+    label: formatDayLabel(anchorDate),
+    description: view === 'completed' ? 'Tasks completed on this day.' : 'Open tasks planned for this day.',
+  };
+};
+
+const getEmptyState = ({ view, quickMode }) => {
+  if (quickMode === 'overdue') {
+    return {
+      icon: 'bi-check2-all',
+      title: 'No overdue tasks right now',
+      copy: 'Everything open is still inside its planned date window.',
+    };
+  }
+
+  return {
+    icon: view === 'completed' ? 'bi-stars' : 'bi-inbox',
+    title: view === 'completed' ? 'No task completed on this day' : 'No task planned for this day',
+    copy: view === 'completed'
+      ? 'Use arrows or calendar to review progress day by day.'
+      : 'Use arrows or calendar to browse nearby dates or add a new task for this slot.',
+  };
 };
 
 function TaskList({
@@ -61,40 +174,84 @@ function TaskList({
   getTimerLabel,
 }) {
   const [showTaskModal, setShowTaskModal] = useState(false);
+  const [taskView, setTaskView] = useState('todo');
+  const [anchorDate, setAnchorDate] = useState(() => getTodayDate());
+  const [quickMode, setQuickMode] = useState(null);
+  const [isCalendarOpen, setIsCalendarOpen] = useState(false);
+  const [calendarMonth, setCalendarMonth] = useState(() => getMonthStartKey(getTodayDate()));
+  const calendarRef = useRef(null);
+
+  useEffect(() => {
+    const handlePointerDown = (event) => {
+      if (!calendarRef.current?.contains(event.target)) {
+        setIsCalendarOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handlePointerDown);
+    return () => document.removeEventListener('mousedown', handlePointerDown);
+  }, []);
 
   const today = getTodayDate();
   const completedTasks = useMemo(() => tasks.filter((task) => task.completed), [tasks]);
-  const todayPendingTasks = useMemo(
-    () => pendingTasks.filter((task) => task.scheduledDate === today),
-    [pendingTasks, today]
-  );
   const overduePendingTasks = useMemo(
     () => pendingTasks.filter((task) => task.scheduledDate < today),
     [pendingTasks, today]
   );
-  const completedTodayTasks = useMemo(
-    () => completedTasks.filter((task) => task.completedAt?.slice(0, 10) === today),
-    [completedTasks, today]
+  const periodMeta = useMemo(
+    () => getPeriodMeta({ view: taskView, anchorDate, quickMode }),
+    [anchorDate, quickMode, taskView]
   );
-  const completionRate = useMemo(
-    () => (tasks.length ? Math.round((completedTasks.length / tasks.length) * 100) : 0),
-    [completedTasks.length, tasks.length]
+  const emptyState = useMemo(
+    () => getEmptyState({ view: taskView, quickMode }),
+    [quickMode, taskView]
   );
-  const nextFocusTask = useMemo(
-    () => [...pendingTasks].sort(sortTasksForFocus)[0] ?? null,
-    [pendingTasks]
+  const summaryMeta = useMemo(
+    () => getSummaryMeta({
+      view: taskView,
+      pendingTasks,
+      completedTasks,
+      overdueCount: overduePendingTasks.length,
+      today,
+    }),
+    [completedTasks, overduePendingTasks.length, pendingTasks, taskView, today]
   );
-  const activeSelectedTask = useMemo(
-    () => tasks.find((task) => task.id === activeTaskId) ?? null,
-    [activeTaskId, tasks]
-  );
-  const spotlightTask = activeSelectedTask ?? nextFocusTask;
+  const calendarDays = useMemo(() => getMonthMatrix(calendarMonth), [calendarMonth]);
+  const visibleTasks = useMemo(() => {
+    const sourceTasks = taskView === 'completed' ? completedTasks : pendingTasks;
+
+    if (quickMode === 'overdue') {
+      return [...sourceTasks]
+        .filter((task) => task.scheduledDate < today)
+        .sort(sortTasksForFocus);
+    }
+
+    return [...sourceTasks]
+      .filter((task) => {
+        const targetDate = taskView === 'completed' ? getCompletedDateKey(task) : task.scheduledDate;
+        return targetDate === anchorDate;
+      })
+      .sort(taskView === 'completed' ? sortCompletedTasks : sortTasksForFocus);
+  }, [anchorDate, completedTasks, pendingTasks, quickMode, taskView, today]);
+  const canShiftForward = useMemo(() => {
+    if (quickMode === 'overdue') {
+      return false;
+    }
+
+    return taskView === 'todo' || anchorDate < today;
+  }, [anchorDate, quickMode, taskView, today]);
 
   useEffect(() => {
     if (editingTask) {
       setShowTaskModal(true);
     }
   }, [editingTask]);
+
+  useEffect(() => {
+    if (taskView === 'completed' && quickMode === 'overdue') {
+      setQuickMode(null);
+    }
+  }, [quickMode, taskView]);
 
   const handleCloseModal = () => {
     setShowTaskModal(false);
@@ -104,6 +261,46 @@ function TaskList({
   const handleOpenCreate = () => {
     onCancelEdit();
     setShowTaskModal(true);
+  };
+
+  const handleShiftDate = (direction) => {
+    if (quickMode === 'overdue') {
+      return;
+    }
+
+    setAnchorDate((currentDate) => addDaysToDateKey(currentDate, direction));
+  };
+
+  const handleJumpToToday = () => {
+    setQuickMode(null);
+    setAnchorDate(today);
+    setCalendarMonth(getMonthStartKey(today));
+    setIsCalendarOpen(false);
+  };
+
+  const handleToggleOverdue = () => {
+    if (taskView === 'completed') {
+      return;
+    }
+
+    setQuickMode((current) => (current === 'overdue' ? null : 'overdue'));
+    setIsCalendarOpen(false);
+  };
+
+  const handleToggleCalendar = () => {
+    if (quickMode === 'overdue') {
+      return;
+    }
+
+    setCalendarMonth(getMonthStartKey(anchorDate));
+    setIsCalendarOpen((current) => !current);
+  };
+
+  const handleSelectCalendarDate = (dateKey) => {
+    setQuickMode(null);
+    setAnchorDate(dateKey);
+    setCalendarMonth(getMonthStartKey(dateKey));
+    setIsCalendarOpen(false);
   };
 
   const handleSubmit = (taskData) => {
@@ -116,32 +313,161 @@ function TaskList({
     setShowTaskModal(false);
   };
 
-  const groupTypeLabel = hasSelectedGroup
-    ? (GROUP_TYPE_LABELS[normalizeGroupType(group?.type)] ?? 'Study')
-    : '';
-  const groupStatusLabel = hasSelectedGroup
-    ? (GROUP_STATUS_LABELS[group?.status] ?? 'Planning')
-    : '';
   const accentStyle = hasSelectedGroup ? getGroupAccentStyle(group?.color) : undefined;
 
   return (
     <section className="panel panel--tasks workspace-screen task-screen" style={accentStyle}>
       <div className="workspace-screen__hero task-screen__hero">
-        <div className="workspace-screen__hero-copy task-screen__hero-copy">
-          <p className="task-panel__eyebrow">Task Workspace</p>
-          <h2>{hasSelectedGroup ? groupName : 'Tasks'}</h2>
-        </div>
-        <div className="workspace-screen__hero-actions task-screen__hero-actions">
-          {hasSelectedGroup ? (
-            <div className="task-screen__context">
-              <span className="task-screen__context-pill">{groupTypeLabel}</span>
-              <span className="task-screen__context-pill">{groupStatusLabel}</span>
-              <span className="task-screen__context-pill">{tasks.length} tasks</span>
+        <div className="task-screen__header">
+          <div className="task-screen__header-title-row">
+            <h2>{groupName || 'Task'}</h2>
+          </div>
+
+          <div className="task-screen__header-controls" aria-label="Task controls">
+            <div className="task-screen__header-col task-screen__header-col--view">
+              <div className="task-screen__view-switch" role="tablist" aria-label="Task view switch">
+                <Button
+                  variant={taskView === 'todo' ? 'primary' : 'ghost'}
+                  className="analytics__filter-button task-screen__view-button"
+                  onClick={() => setTaskView('todo')}
+                  aria-selected={taskView === 'todo'}
+                >
+                  To Do
+                </Button>
+                <Button
+                  variant={taskView === 'completed' ? 'primary' : 'ghost'}
+                  className="analytics__filter-button task-screen__view-button"
+                  onClick={() => setTaskView('completed')}
+                  aria-selected={taskView === 'completed'}
+                >
+                  Completed
+                </Button>
+              </div>
             </div>
-          ) : null}
-          <Button variant="primary" onClick={handleOpenCreate} disabled={!hasSelectedGroup}>
-            <i className="bi bi-plus-lg" aria-hidden="true" /> New Task
-          </Button>
+
+            <div className="task-screen__header-col task-screen__header-col--period">
+              <div className="task-section__quick-actions" aria-label="Task quick filters">
+                <Button
+                  variant="ghost"
+                  className={`task-section__quick-button icon-button ${quickMode === null && anchorDate === today ? 'is-active' : ''}`.trim()}
+                  onClick={handleJumpToToday}
+                  aria-label="Vai a oggi"
+                  title="Vai a oggi"
+                >
+                  <i className="bi bi-calendar2-day" aria-hidden="true" />
+                </Button>
+                {taskView === 'todo' ? (
+                  <Button
+                    variant="ghost"
+                    className={`task-section__quick-button icon-button ${quickMode === 'overdue' ? 'is-active' : ''}`.trim()}
+                    onClick={handleToggleOverdue}
+                    aria-label="Mostra task scaduti"
+                    title="Mostra task scaduti"
+                  >
+                    <i className="bi bi-exclamation-circle" aria-hidden="true" />
+                  </Button>
+                ) : null}
+              </div>
+
+              <div className="analytics__period-nav task-section__period-nav" aria-label="Task period navigation">
+                <Button
+                  variant="ghost"
+                  className="analytics__nav-button icon-button"
+                  onClick={() => handleShiftDate(-1)}
+                  disabled={quickMode === 'overdue'}
+                  aria-label="View previous day"
+                  title="View previous day"
+                >
+                  <i className="bi bi-chevron-left" aria-hidden="true" />
+                </Button>
+
+                <div className="analytics__period-label task-section__period-label">
+                  <span>{periodMeta.caption}</span>
+                  <strong>{periodMeta.label}</strong>
+                </div>
+
+                <div className="task-section__calendar-shell" ref={calendarRef}>
+                  <Button
+                    variant="ghost"
+                    className={`analytics__nav-button icon-button ${isCalendarOpen ? 'is-active' : ''}`.trim()}
+                    onClick={handleToggleCalendar}
+                    disabled={quickMode === 'overdue'}
+                    aria-label="Choose a date"
+                    title="Choose a date"
+                  >
+                    <i className="bi bi-calendar3" aria-hidden="true" />
+                  </Button>
+
+                  {isCalendarOpen ? (
+                    <div className="task-calendar" role="dialog" aria-label="Task calendar">
+                      <div className="task-calendar__header">
+                        <Button
+                          variant="ghost"
+                          className="task-calendar__nav icon-button"
+                          onClick={() => setCalendarMonth((current) => addMonthsToDateKey(current, -1))}
+                          aria-label="Previous month"
+                        >
+                          <i className="bi bi-chevron-left" aria-hidden="true" />
+                        </Button>
+
+                        <strong>{formatMonthLabel(calendarMonth)}</strong>
+
+                        <Button
+                          variant="ghost"
+                          className="task-calendar__nav icon-button"
+                          onClick={() => setCalendarMonth((current) => addMonthsToDateKey(current, 1))}
+                          aria-label="Next month"
+                        >
+                          <i className="bi bi-chevron-right" aria-hidden="true" />
+                        </Button>
+                      </div>
+
+                      <div className="task-calendar__weekdays" aria-hidden="true">
+                        {WEEKDAY_LABELS.map((label) => (
+                          <span key={label}>{label}</span>
+                        ))}
+                      </div>
+
+                      <div className="task-calendar__grid">
+                        {calendarDays.flat().map((day) => (
+                          <button
+                            key={day.key}
+                            type="button"
+                            className={[
+                              'task-calendar__day',
+                              day.isCurrentMonth ? '' : 'is-muted',
+                              day.key === anchorDate ? 'is-selected' : '',
+                              day.key === today ? 'is-today' : '',
+                            ].filter(Boolean).join(' ')}
+                            onClick={() => handleSelectCalendarDate(day.key)}
+                          >
+                            {day.dayNumber}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+
+                <Button
+                  variant="ghost"
+                  className="analytics__nav-button icon-button"
+                  onClick={() => handleShiftDate(1)}
+                  disabled={!canShiftForward}
+                  aria-label="View next day"
+                  title={canShiftForward ? 'View next day' : 'No later day available'}
+                >
+                  <i className="bi bi-chevron-right" aria-hidden="true" />
+                </Button>
+              </div>
+            </div>
+
+            <div className="task-screen__header-col task-screen__header-col--action">
+              <Button variant="primary" onClick={handleOpenCreate} disabled={!hasSelectedGroup}>
+                <i className="bi bi-plus-lg" aria-hidden="true" /> New Task
+              </Button>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -218,125 +544,13 @@ function TaskList({
               </section>
             ) : (
               <>
-                <div className="task-screen__overview">
-                  <section className="settings-card task-focus-panel">
-                    <div className="task-focus-panel__header">
-                      <div>
-                        <span className="settings-card__eyebrow">Focus</span>
-                        <h3>{activeSelectedTask ? 'Current session' : 'Next best task'}</h3>
-                      </div>
-                      {spotlightTask ? (
-                        <span className={`priority-badge priority-badge--${spotlightTask.priority}`}>
-                          {spotlightTask.priority}
-                        </span>
-                      ) : null}
-                    </div>
-
-                    {spotlightTask ? (
-                      <>
-                        <strong className="task-focus-panel__title">{spotlightTask.title}</strong>
-                        <p className="task-focus-panel__description">
-                          {activeSelectedTask
-                            ? 'The timer is already attached to this task, so you can keep going or quickly review the details.'
-                            : 'This is the clearest next block to work on based on schedule and priority.'}
-                        </p>
-
-                        <div className="task-focus-panel__meta">
-                          <span className="task-focus-panel__meta-chip">
-                            <i className="bi bi-calendar2-day" aria-hidden="true" />
-                            {spotlightTask.scheduledDate}
-                          </span>
-                          <span className="task-focus-panel__meta-chip">
-                            <i className="bi bi-hourglass-split" aria-hidden="true" />
-                            {getTimerLabel(spotlightTask)} / {spotlightTask.timer || 0}m
-                          </span>
-                          {overduePendingTasks.length > 0 ? (
-                            <span className="task-focus-panel__meta-chip task-focus-panel__meta-chip--alert">
-                              <i className="bi bi-exclamation-circle" aria-hidden="true" />
-                              {overduePendingTasks.length} overdue
-                            </span>
-                          ) : null}
-                        </div>
-
-                        <div className="task-focus-panel__actions">
-                          <Button
-                            variant={isRunning && activeTaskId === spotlightTask.id ? 'ghost' : 'primary'}
-                            onClick={() => (
-                              isRunning && activeTaskId === spotlightTask.id
-                                ? onPauseTimer?.()
-                                : onStartTimer?.(spotlightTask)
-                            )}
-                            disabled={spotlightTask.timer <= 0}
-                          >
-                            <i
-                              className={`bi ${isRunning && activeTaskId === spotlightTask.id ? 'bi-pause-fill' : 'bi-play-fill'}`}
-                              aria-hidden="true"
-                            />
-                            {isRunning && activeTaskId === spotlightTask.id ? 'Pause focus' : 'Start focus'}
-                          </Button>
-                          <Button variant="ghost" onClick={() => onEditTask(spotlightTask)}>
-                            <i className="bi bi-pencil-square" aria-hidden="true" /> Edit task
-                          </Button>
-                        </div>
-                      </>
-                    ) : (
-                      <div className="task-focus-panel__empty">
-                        <strong>No task ready yet</strong>
-                        <p>Add the first task for this group to surface a clear next action here.</p>
-                      </div>
-                    )}
-                  </section>
-
-                  <section className="settings-card task-summary-panel">
-                    <div className="task-summary-panel__header">
-                      <div>
-                        <span className="settings-card__eyebrow">Overview</span>
-                        <h3>Queue health</h3>
-                      </div>
-                    </div>
-
-                    <div className="task-summary-panel__grid">
-                      <article className="task-summary-panel__metric">
-                        <span>Open</span>
-                        <strong>{pendingTasks.length}</strong>
-                        <p>Still in the queue</p>
-                      </article>
-                      <article className="task-summary-panel__metric">
-                        <span>Today</span>
-                        <strong>{todayPendingTasks.length}</strong>
-                        <p>Need attention now</p>
-                      </article>
-                      <article className="task-summary-panel__metric">
-                        <span>Done today</span>
-                        <strong>{completedTodayTasks.length}</strong>
-                        <p>Completed blocks</p>
-                      </article>
-                      <article className="task-summary-panel__metric">
-                        <span>Completion</span>
-                        <strong>{completionRate}%</strong>
-                        <p>Across this group</p>
-                      </article>
-                    </div>
-                  </section>
-                </div>
-
                 <div className="task-sections">
-                  <TaskTodoSection
-                    pendingTasks={pendingTasks}
-                    overdueCount={overduePendingTasks.length}
-                    activeTaskId={activeTaskId}
-                    isRunning={isRunning}
-                    onToggleComplete={onToggleComplete}
-                    onDeleteTask={onDeleteTask}
-                    onEditTask={onEditTask}
-                    onStartTimer={onStartTimer}
-                    onPauseTimer={onPauseTimer}
-                    onResetTimer={onResetTimer}
-                    getTimerLabel={getTimerLabel}
-                  />
-
-                  <TaskCompletedSection
-                    completedTasks={completedTasks}
+                  <TaskSection
+                    groupName={groupName}
+                    view={taskView}
+                    visibleTasks={visibleTasks}
+                    summaryMeta={summaryMeta}
+                    emptyState={emptyState}
                     activeTaskId={activeTaskId}
                     isRunning={isRunning}
                     onToggleComplete={onToggleComplete}

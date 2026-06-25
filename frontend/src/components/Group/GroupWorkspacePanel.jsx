@@ -49,9 +49,13 @@ function GroupEditorWorkspace({ mode, group, onSubmit, onCancel, isLoading = fal
     setDropActive(false);
     setShowDiscardNotice(false);
 
-    window.setTimeout(() => {
+    const focusTimeoutId = window.setTimeout(() => {
       nameInputRef.current?.focus();
     }, 0);
+
+    return () => {
+      window.clearTimeout(focusTimeoutId);
+    };
   }, [group, isEditing, mode]);
 
   const validateName = (value) => {

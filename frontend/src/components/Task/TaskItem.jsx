@@ -1,5 +1,3 @@
-// Card che rappresenta un singolo task nelle colonne del gruppo.
-// Ripensa il task come "focus ledger": gerarchia forte, tempo evidente e azione primaria dominante.
 import Button from '../UI/Button';
 
 const formatCalendarStack = (value) => {
@@ -55,8 +53,15 @@ const PRIORITY_LABELS = {
   high: 'High priority',
 };
 
+const PRIORITY_HINTS = {
+  low: 'Flexible slot',
+  medium: 'Keep momentum',
+  high: 'Do first',
+};
+
 function TaskItem({
   task,
+  groupName,
   onToggleComplete,
   onDelete,
   onEdit,
@@ -70,26 +75,41 @@ function TaskItem({
   const { weekday, month, day, fullDate } = formatCalendarStack(task.scheduledDate);
   const today = getTodayDate();
   const isOverdue = !task.completed && Boolean(task.scheduledDate) && task.scheduledDate < today;
-  const stateLabel = task.completed
-    ? formatCompletedLabel(task.completedAt)
-    : isActiveTimer
-      ? 'Active now'
-      : isOverdue
-        ? 'Overdue'
-        : '';
   const noteExists = Boolean(task.note?.trim());
   const descExists = Boolean(task.desc?.trim());
   const hasTimer = Number(task.timer) > 0;
   const priorityLabel = PRIORITY_LABELS[task.priority] ?? task.priority;
+  const priorityHint = PRIORITY_HINTS[task.priority] ?? 'Planned focus';
+  const resolvedGroupName = groupName || task.groupName || 'No group';
   const progressSummary = task.completed
     ? 'Completed'
-    : isActiveTimer
-      ? 'In focus'
-      : isOverdue
-        ? 'Catch up now'
-        : task.scheduledDate === today
-          ? 'Due today'
-          : 'On track';
+    : isTimerRunning
+      ? 'Running'
+      : isActiveTimer
+        ? 'Paused'
+        : isOverdue
+          ? 'Overdue'
+          : task.scheduledDate === today
+            ? 'Today'
+            : 'Planned';
+  const statusDetail = task.completed
+    ? formatCompletedLabel(task.completedAt)
+    : isOverdue
+      ? fullDate
+      : task.scheduledDate === today
+        ? 'Scheduled today'
+        : fullDate;
+  const timeSummary = task.completed
+    ? 'Timer idle'
+    : hasTimer
+      ? isActiveTimer
+        ? timerLabel
+        : `${task.timer}m planned`
+      : 'No timer';
+  const timeDetail = !task.completed && hasTimer && isActiveTimer ? `Plan ${task.timer}m` : null;
+  const canStartTimer = hasTimer && !task.completed;
+  const primaryActionLabel = isTimerRunning ? 'Pause' : isActiveTimer ? 'Resume' : 'Start';
+  const primaryActionIcon = isTimerRunning ? 'bi-pause-fill' : 'bi-play-fill';
 
   return (
     <article
@@ -106,75 +126,30 @@ function TaskItem({
       <div className="task-item__main">
         <div className="task-item__topline">
           <div className="task-item__headline">
-            <div className="task-item__eyebrow">
-              <span className="task-item__group-dot" aria-hidden="true" />
-              <span className={`priority-badge priority-badge--${task.priority}`}>{priorityLabel}</span>
-              {stateLabel ? (
-                <span
-                  className={`task-item__state-chip ${task.completed ? 'task-item__state-chip--completed' : ''} ${
-                    isOverdue ? 'task-item__state-chip--overdue' : ''
-                  }`.trim()}
-                >
-                  {stateLabel}
-                </span>
-              ) : null}
-            </div>
-            <h3 className="task-item__title">{task.title}</h3>
+            <span className="task-item__group-name">{resolvedGroupName}</span>
           </div>
+          <h3 className="task-item__title">{task.title}</h3>
         </div>
 
-        <div className="task-item__facts">
-          <div className="task-item__fact">
-            <span className="task-item__fact-icon" aria-hidden="true">
-              <i className="bi bi-flag-fill" />
-            </span>
-            <div className="task-item__fact-copy">
-              <span className="task-item__fact-label">Priority</span>
-              <strong className="task-item__fact-value">{priorityLabel}</strong>
-            </div>
+        <div className="task-item__summary-strip">
+          <div className="task-item__summary-cell">
+            <span className="task-item__summary-label">Status</span>
+            <strong className="task-item__summary-value">{progressSummary}</strong>
+            <span className="task-item__summary-subvalue">{statusDetail}</span>
           </div>
 
-          <div className={`task-item__fact ${isActiveTimer ? 'task-item__fact--active' : ''}`.trim()}>
-            <span className="task-item__fact-icon" aria-hidden="true">
-              <i className={`bi ${hasTimer ? 'bi-hourglass-split' : 'bi-stopwatch'}`} />
-            </span>
-            <div className="task-item__fact-copy">
-              <span className="task-item__fact-label">Focus</span>
-              <strong className="task-item__fact-value">
-                {hasTimer ? `${timerLabel} / ${task.timer}m` : 'No timer planned'}
-              </strong>
-            </div>
+          <div className={`task-item__summary-cell ${isActiveTimer && !task.completed ? 'task-item__summary-cell--active' : ''}`.trim()}>
+            <span className="task-item__summary-label">Time</span>
+            <strong className={`task-item__summary-value ${hasTimer ? 'task-item__timer-display' : ''}`.trim()}>
+              {timeSummary}
+            </strong>
+            {timeDetail ? <span className="task-item__summary-subvalue">{timeDetail}</span> : null}
           </div>
 
-          <div
-            className={`task-item__fact ${
-              task.completed
-                ? 'task-item__fact--completed'
-                : isOverdue
-                  ? 'task-item__fact--alert'
-                  : isActiveTimer
-                    ? 'task-item__fact--active'
-                    : ''
-            }`.trim()}
-          >
-            <span className="task-item__fact-icon" aria-hidden="true">
-              <i
-                className={`bi ${
-                  task.completed
-                    ? 'bi-check2-circle'
-                    : isOverdue
-                      ? 'bi-exclamation-diamond'
-                      : isActiveTimer
-                        ? 'bi-lightning-charge-fill'
-                        : 'bi-calendar2-check'
-                }`}
-              />
-            </span>
-            <div className="task-item__fact-copy">
-              <span className="task-item__fact-label">Status</span>
-              <strong className="task-item__fact-value">{progressSummary}</strong>
-              <span className="task-item__fact-subvalue">{fullDate}</span>
-            </div>
+          <div className="task-item__summary-cell">
+            <span className="task-item__summary-label">Priority</span>
+            <strong className="task-item__summary-value">{priorityLabel}</strong>
+            <span className="task-item__summary-subvalue">{priorityHint}</span>
           </div>
         </div>
 
@@ -188,43 +163,30 @@ function TaskItem({
         ) : null}
 
         <div className="task-item__footer">
-          {isTimerRunning ? (
+          <div className="task-item__icon-actions">
             <Button
-              variant="primary"
-              className="task-item__primary-action task-item__primary-action--pause"
-              onClick={onPauseTimer}
-              aria-label="Metti in pausa timer"
-              title="Metti in pausa timer"
+              variant={isTimerRunning ? 'ghost' : 'primary'}
+              className={`task-item__icon-button task-item__icon-button--primary ${
+                isTimerRunning ? 'task-item__action-button--pause' : ''
+              }`.trim()}
+              onClick={isTimerRunning ? onPauseTimer : () => onStartTimer(task)}
+              disabled={!canStartTimer}
+              aria-label={primaryActionLabel === 'Pause' ? 'Metti in pausa timer' : 'Avvia timer'}
+              title={primaryActionLabel === 'Pause' ? 'Metti in pausa timer' : 'Avvia timer'}
             >
-              <i className="bi bi-pause-fill" aria-hidden="true" />
-              Pause
+              <i className={`bi ${primaryActionIcon}`} aria-hidden="true" />
             </Button>
-          ) : (
-            <Button
-              variant="primary"
-              className="task-item__primary-action"
-              onClick={() => onStartTimer(task)}
-              disabled={!hasTimer}
-              aria-label="Avvia timer"
-              title="Avvia timer"
-            >
-              <i className="bi bi-play-fill" aria-hidden="true" />
-              Start focus
-            </Button>
-          )}
 
-          <div className="task-item__secondary-actions">
-            {hasTimer ? (
-              <Button
-                variant="ghost"
-                className="task-item__icon-button icon-button"
-                onClick={() => onResetTimer(task)}
-                aria-label="Reset timer"
-                title="Reset timer"
-              >
-                <i className="bi bi-arrow-counterclockwise" aria-hidden="true" />
-              </Button>
-            ) : null}
+            <Button
+              variant="ghost"
+              className="task-item__icon-button icon-button"
+              onClick={() => onResetTimer(task)}
+              disabled={!canStartTimer}
+              aria-label="Riavvia timer"
+              title="Riavvia timer"
+            >
+              <i className="bi bi-arrow-repeat" aria-hidden="true" />
+            </Button>
             <Button
               variant="ghost"
               className="task-item__icon-button icon-button"
@@ -243,20 +205,20 @@ function TaskItem({
             >
               <i className="bi bi-trash3-fill" aria-hidden="true" />
             </Button>
-          </div>
 
-          <label className="task-item__check task-item__check--edge">
-            <input
-              className="task-item__check-input"
-              type="checkbox"
-              checked={task.completed}
-              onChange={() => onToggleComplete(task.id)}
-              aria-label={task.completed ? 'Segna task come da fare' : 'Segna task come completato'}
-            />
-            <span className={`task-item__check-box ${task.completed ? 'task-item__check-box--checked' : ''}`}>
-              <i className="bi bi-check2" aria-hidden="true" />
-            </span>
-          </label>
+            <label className="task-item__check task-item__check--edge">
+              <input
+                className="task-item__check-input"
+                type="checkbox"
+                checked={task.completed}
+                onChange={() => onToggleComplete(task.id)}
+                aria-label={task.completed ? 'Segna task come da fare' : 'Segna task come completato'}
+              />
+              <span className={`task-item__check-box ${task.completed ? 'task-item__check-box--checked' : ''}`}>
+                <i className="bi bi-check2" aria-hidden="true" />
+              </span>
+            </label>
+          </div>
         </div>
       </div>
     </article>
