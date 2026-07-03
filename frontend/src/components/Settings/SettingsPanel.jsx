@@ -13,6 +13,7 @@ const SOURCE_LABELS = {
   'localStorage-manual-merge': 'Manual localStorage merge',
   'localStorage-blocked-different-account': 'Local data blocked for another account',
   'firestore-sync': 'Firestore backup refresh',
+  'local-only': 'Browser local workspace',
   'no-local-data': 'No localStorage data found',
 };
 
@@ -28,12 +29,16 @@ function SettingsPanel({
   pendingTasksCount,
   selectedGroupName,
   migrationSource,
+  isGuestMode,
   isReimporting,
+  onSignIn,
   onOpenSyncModal,
   onShowAnalytics,
 }) {
   const [avatarLoadFailed, setAvatarLoadFailed] = useState(false);
   const avatarUrl = authUser?.photoURL || '';
+  const accountName = isGuestMode ? 'Offline guest' : authUser?.displayName || 'Google User';
+  const accountLabel = isGuestMode ? 'Local browser workspace' : authUser?.email || 'Authenticated session';
 
   useEffect(() => {
     setAvatarLoadFailed(false);
@@ -58,10 +63,16 @@ function SettingsPanel({
           <Button type="button" variant="ghost" onClick={onShowAnalytics}>
             <i className="bi bi-bar-chart-line-fill" aria-hidden="true" /> Open analytics
           </Button>
-          <Button type="button" variant="primary" onClick={onOpenSyncModal} disabled={isReimporting}>
-            <i className={`bi bi-arrow-repeat ${isReimporting ? 'dashboard-header__spin' : ''}`} aria-hidden="true" />
-            {isReimporting ? 'Sync in progress' : 'Sync local data'}
-          </Button>
+          {isGuestMode ? (
+            <Button type="button" variant="primary" onClick={onSignIn}>
+              <i className="bi bi-google" aria-hidden="true" /> Accedi per sincronizzare
+            </Button>
+          ) : (
+            <Button type="button" variant="primary" onClick={onOpenSyncModal} disabled={isReimporting}>
+              <i className={`bi bi-arrow-repeat ${isReimporting ? 'dashboard-header__spin' : ''}`} aria-hidden="true" />
+              {isReimporting ? 'Sync in progress' : 'Sync local data'}
+            </Button>
+          )}
         </div>
       </div>
 
@@ -144,12 +155,12 @@ function SettingsPanel({
               />
             ) : (
               <span className="settings-account__avatar settings-account__avatar--fallback">
-                {(authUser?.displayName || authUser?.email || 'U').slice(0, 1).toUpperCase()}
+                {accountName.slice(0, 1).toUpperCase()}
               </span>
             )}
             <div className="settings-account__copy">
-              <strong>{authUser?.displayName || 'Google User'}</strong>
-              <span>{authUser?.email || 'Authenticated session'}</span>
+              <strong>{accountName}</strong>
+              <span>{accountLabel}</span>
             </div>
           </div>
           <dl className="settings-meta-list">
@@ -193,7 +204,11 @@ function SettingsPanel({
           <div className="settings-data-highlight">
             <span>Completion rate</span>
             <strong>{completionRate}%</strong>
-            <p>Your current workspace snapshot is ready for analytics and backup sync.</p>
+            <p>
+              {isGuestMode
+                ? 'You are working on the local browser snapshot. Sign in with Google when you want to reuse the cloud sync action.'
+                : 'Your current workspace snapshot is ready for analytics and backup sync.'}
+            </p>
           </div>
               </section>
             </div>

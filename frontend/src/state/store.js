@@ -1,5 +1,15 @@
 // Store globale Zustand.
 // Gestisce auth, bootstrap Firestore, migrazione iniziale e CRUD applicativi.
+//
+// Questo file contiene la regia principale dell'app:
+// - ascolta gli eventi Auth
+// - decide quando caricare da Firestore o da storage locale
+// - coordina groupService, taskService e migrationService
+// - mantiene nello stato UI sia la modalita cloud sia quella guest/offline
+//
+// In termini architetturali, e il punto in cui la business logic del
+// prototipo si concentra davvero. I service sottostanti eseguono le singole
+// operazioni; lo store decide quando farle e come rifletterle nello stato.
 import { create } from 'zustand';
 import { authService } from '../services/authService';
 import { firestoreService } from '../services/firestoreService';
@@ -16,6 +26,7 @@ const authBootstrapState = {
   promise: null,
 };
 
+// Preferenze di sola UI persistite nel browser.
 const getInitialSidebarState = () => {
   if (typeof window === 'undefined') {
     return true;
@@ -34,6 +45,7 @@ const getInitialStatsPeriod = () => {
   return VALID_STATS_PERIODS.has(stored) ? stored : 'week';
 };
 
+// Stato base riusabile per reset completi o parziali.
 const getBaseState = () => ({
   tasks: [],
   groups: [],
@@ -44,6 +56,7 @@ const getBaseState = () => ({
   activeTab: 'analytics',
   authUser: null,
   authStatus: 'loading',
+  isGuestMode: false,
   dataStatus: 'idle',
   migrationStatus: 'idle',
   isSigningIn: false,
@@ -52,8 +65,11 @@ const getBaseState = () => ({
   migrationSource: null,
 });
 
+// Lo stato visuale dei gruppi dipende dai task correnti e quindi viene
+// sempre ricalcolato, non letto come fonte di verita dal backend.
 const refreshGroups = (groups, tasks) => groupService.attachStatuses(groups, tasks);
 
+// Mantiene una selezione gruppo valida anche quando cambia lo snapshot.
 const resolveSelectedGroupId = (groups, currentSelectedGroupId) => {
   if (groups.some((group) => group.id === currentSelectedGroupId)) {
     return currentSelectedGroupId;
@@ -62,6 +78,8 @@ const resolveSelectedGroupId = (groups, currentSelectedGroupId) => {
   return groups[0]?.id ?? '';
 };
 
+// Salvataggio del backup locale associato a un account Google specifico.
+// Serve per riaprire il workspace piu velocemente e per supportare il sync.
 const syncLocalBackup = (uid, tasks, groups, workspaceRevision) => {
   const migrationMeta = storageService.getMigrationMeta();
 
@@ -84,6 +102,28 @@ const syncLocalBackup = (uid, tasks, groups, workspaceRevision) => {
   });
 };
 
+const syncGuestLocalBackup = (tasks, groups, workspaceRevision) => {
+  const migrationMeta = storageService.getMigrationMeta();
+
+  // In guest mode il browser diventa la sola fonte disponibile:
+  // persistiamo sempre lo snapshot locale senza dipendere da Firebase.
+  storageService.setAppData({
+    version: 1,
+    workspaceRevision,
+    tasks,
+    groups,
+  });
+
+  storageService.setMigrationMeta({
+    uid: migrationMeta?.uid ?? null,
+    source: 'local-only',
+    workspaceRevision,
+    updatedAt: new Date().toISOString(),
+  });
+};
+
+// Restituisce lo snapshot locale solo se appartiene all'utente passato.
+// Questo impedisce di bootstrapare nel cloud dati di un altro account.
 const getOwnedLocalSnapshot = (uid) => {
   const migrationMeta = storageService.getMigrationMeta();
 
@@ -104,6 +144,7 @@ const getOwnedLocalSnapshot = (uid) => {
   };
 };
 
+// Normalizza uno snapshot generico in un frammento di stato app utilizzabile.
 const buildStateFromSnapshot = (snapshot, currentSelectedGroupId = '') => {
   const tasks = Array.isArray(snapshot?.tasks) ? snapshot.tasks : [];
   const groups = refreshGroups(Array.isArray(snapshot?.groups) ? snapshot.groups : [], tasks);
@@ -118,6 +159,26 @@ const buildStateFromSnapshot = (snapshot, currentSelectedGroupId = '') => {
   };
 };
 
+// Persistenza unificata del "working snapshot":
+// - se abbiamo un uid, salviamo un backup collegato all'account
+// - se siamo guest, salviamo come workspace solo locale
+const persistWorkingSnapshot = (uid, tasks, groups, workspaceRevision) => {
+  if (uid) {
+    syncLocalBackup(uid, tasks, groups, workspaceRevision);
+    return;
+  }
+
+  syncGuestLocalBackup(tasks, groups, workspaceRevision);
+};
+
+// Legge lo snapshot guest dal browser e lo adatta allo stato UI.
+const getGuestStateFromLocalSnapshot = (currentSelectedGroupId = '') => {
+  const localSnapshot = storageService.getAppData();
+  return buildStateFromSnapshot(localSnapshot, currentSelectedGroupId);
+};
+
+// Caricamento remoto completo del workspace da Firestore.
+// Lo usiamo nel bootstrap e nei refresh manuali.
 const loadRemoteState = async (uid, currentSelectedGroupId = '', userProfile = null) => {
   const { userProfile: resolvedUserProfile, tasks, groups } = await firestoreService.loadUserData(uid, userProfile);
   const nextGroups = refreshGroups(groups, tasks);
@@ -134,8 +195,16 @@ const loadRemoteState = async (uid, currentSelectedGroupId = '', userProfile = n
 export const useAppStore = create((set, get) => ({
   ...getBaseState(),
 
+  // Gestore centrale degli eventi Auth.
+  // Viene invocato ogni volta che Firebase segnala login/logout/ripristino.
   handleAuthStateChange: async (user) => {
     if (!user) {
+      // Se siamo gia in guest mode non vogliamo che un evento `null`
+      // di Auth ci butti fuori dal workspace locale.
+      if (get().authStatus === 'guest') {
+        return;
+      }
+
       authBootstrapState.uid = '';
       authBootstrapState.promise = null;
       set((state) => ({
@@ -143,11 +212,14 @@ export const useAppStore = create((set, get) => ({
         sidebarOpen: state.sidebarOpen,
         statsPeriod: state.statsPeriod,
         authStatus: 'unauthenticated',
+        isGuestMode: false,
       }));
       return;
     }
 
     if (authBootstrapState.promise && authBootstrapState.uid === user.uid) {
+      // Evita bootstrap duplicati per lo stesso utente quando il listener
+      // Auth emette piu eventi ravvicinati.
       await authBootstrapState.promise;
       return;
     }
@@ -156,27 +228,35 @@ export const useAppStore = create((set, get) => ({
       set({
         authUser: user,
         authStatus: 'authenticated',
+        isGuestMode: false,
         dataStatus: 'loading',
         migrationStatus: 'idle',
         appError: '',
       });
 
       try {
+        // 1. Allineiamo/creiamo il profilo utente su Firestore.
         const userProfile = await firestoreService.upsertUserProfile(user);
         const shouldForceRemoteBootstrap = !userProfile.migration?.localStorageImported;
 
+        // 2. Se serve, importiamo nel cloud il backup locale preesistente.
         set({ migrationStatus: 'running' });
         const migrationResult = await migrationService.migrateOnFirstLogin(user.uid, userProfile);
+
+        // 3. Se il backup locale appartiene allo stesso utente e la revisione
+        // coincide, possiamo bootstrapare da cache invece che dal cloud.
         const localSnapshot = shouldForceRemoteBootstrap ? null : getOwnedLocalSnapshot(user.uid);
         const canBootstrapFromCache = (
           localSnapshot &&
           localSnapshot.workspaceRevision === userProfile.workspaceRevision
         );
 
+        // 4. Costruiamo lo stato dall'origine piu adatta.
         const nextState = canBootstrapFromCache
           ? buildStateFromSnapshot(localSnapshot, get().selectedGroupId)
           : await loadRemoteState(user.uid, get().selectedGroupId);
 
+        // 5. Se siamo passati dal cloud, aggiorniamo il backup locale.
         if (!canBootstrapFromCache) {
           syncLocalBackup(user.uid, nextState.tasks, nextState.groups, nextState.workspaceRevision);
         }
@@ -184,6 +264,7 @@ export const useAppStore = create((set, get) => ({
         set({
           authUser: user,
           authStatus: 'authenticated',
+          isGuestMode: false,
           dataStatus: 'ready',
           migrationStatus: 'completed',
           migrationSource: migrationResult.source,
@@ -213,6 +294,31 @@ export const useAppStore = create((set, get) => ({
     await bootstrapPromise;
   },
 
+  // Ingresso esplicito nel workspace locale senza account cloud.
+  enterGuestMode: () => {
+    const nextState = getGuestStateFromLocalSnapshot(get().selectedGroupId);
+    const migrationMeta = storageService.getMigrationMeta();
+
+    // L'accesso guest riapre il workspace a partire dal browser:
+    // niente cloud, ma lettura e modifica locali complete.
+    set((state) => ({
+      ...state,
+      authUser: null,
+      authStatus: 'guest',
+      isGuestMode: true,
+      dataStatus: 'ready',
+      migrationStatus: 'idle',
+      migrationSource: migrationMeta?.source ?? 'local-only',
+      tasks: nextState.tasks,
+      groups: nextState.groups,
+      workspaceRevision: nextState.workspaceRevision,
+      selectedGroupId: nextState.selectedGroupId,
+      appError: '',
+    }));
+  },
+
+  // Avvia il login Google. Il vero bootstrap dati avverra poi
+  // nel listener `handleAuthStateChange`.
   signInWithGoogle: async () => {
     set({ isSigningIn: true, appError: '' });
 
@@ -228,7 +334,20 @@ export const useAppStore = create((set, get) => ({
     }
   },
 
+  // In cloud mode effettua il logout Firebase.
+  // In guest mode esegue solo un reset locale della shell di accesso.
   signOut: async () => {
+    if (get().isGuestMode) {
+      set((state) => ({
+        ...getBaseState(),
+        sidebarOpen: state.sidebarOpen,
+        statsPeriod: state.statsPeriod,
+        authStatus: 'unauthenticated',
+        appError: '',
+      }));
+      return;
+    }
+
     set({ appError: '' });
 
     try {
@@ -241,9 +360,13 @@ export const useAppStore = create((set, get) => ({
     }
   },
 
+  // Rilettura manuale dello snapshot remoto da Firestore.
   refreshRemoteData: async () => {
     const { authUser, selectedGroupId } = get();
     if (!authUser) {
+      set({
+        appError: 'Accedi con Google per aggiornare il workspace cloud.',
+      });
       return;
     }
 
@@ -268,9 +391,14 @@ export const useAppStore = create((set, get) => ({
     }
   },
 
+  // Riusa il comando di sync esistente: push manuale del locale verso Firestore,
+  // seguito da una rilettura remota per riallineare lo store.
   reimportLocalData: async () => {
     const { authUser, selectedGroupId } = get();
     if (!authUser) {
+      set({
+        appError: 'Accedi con Google per sincronizzare i dati locali con Firestore.',
+      });
       return;
     }
 
@@ -299,19 +427,24 @@ export const useAppStore = create((set, get) => ({
     }
   },
 
+  // Mutazioni di sola navigazione/UI.
   selectGroup: (groupId) => {
     set({ selectedGroupId: groupId, activeTab: 'tasks' });
   },
 
+  // CRUD gruppi -----------------------------------------------------------
+  //
+  // Tutte queste azioni:
+  // - delegano la mutazione a `groupService`
+  // - ricalcolano lo stato derivato
+  // - persistono lo snapshot risultante in cloud backup o guest local
   createGroup: async (groupData) => {
     const { authUser, tasks, groups, workspaceRevision } = get();
-    if (!authUser) {
-      return;
-    }
+    const uid = authUser?.uid ?? null;
 
     try {
       const nextGroupState = await groupService.createGroup(
-        authUser.uid,
+        uid,
         groupData,
         groups,
         workspaceRevision
@@ -319,7 +452,7 @@ export const useAppStore = create((set, get) => ({
 
       set((state) => {
         const nextGroups = refreshGroups(nextGroupState.groups, tasks);
-        syncLocalBackup(authUser.uid, tasks, nextGroups, nextGroupState.workspaceRevision);
+        persistWorkingSnapshot(uid, tasks, nextGroups, nextGroupState.workspaceRevision);
         return {
           groups: nextGroups,
           workspaceRevision: nextGroupState.workspaceRevision,
@@ -338,13 +471,11 @@ export const useAppStore = create((set, get) => ({
 
   updateGroup: async (groupId, updates) => {
     const { authUser, tasks, groups, workspaceRevision } = get();
-    if (!authUser) {
-      return;
-    }
+    const uid = authUser?.uid ?? null;
 
     try {
       const nextGroupState = await groupService.updateGroup(
-        authUser.uid,
+        uid,
         groupId,
         updates,
         groups,
@@ -354,7 +485,7 @@ export const useAppStore = create((set, get) => ({
       set(() => ({
         groups: (() => {
           const nextGroups = refreshGroups(nextGroupState.groups, tasks);
-          syncLocalBackup(authUser.uid, tasks, nextGroups, nextGroupState.workspaceRevision);
+          persistWorkingSnapshot(uid, tasks, nextGroups, nextGroupState.workspaceRevision);
           return nextGroups;
         })(),
         workspaceRevision: nextGroupState.workspaceRevision,
@@ -375,19 +506,17 @@ export const useAppStore = create((set, get) => ({
       groups: currentGroups,
       workspaceRevision,
     } = get();
-    if (!authUser) {
-      return;
-    }
+    const uid = authUser?.uid ?? null;
 
     try {
       const nextTaskState = await taskService.deleteTasksByGroup(
-        authUser.uid,
+        uid,
         groupId,
         currentTasks,
         workspaceRevision
       );
       const nextGroupState = await groupService.deleteGroup(
-        authUser.uid,
+        uid,
         groupId,
         currentGroups,
         nextTaskState.workspaceRevision
@@ -395,8 +524,8 @@ export const useAppStore = create((set, get) => ({
 
       set((state) => {
         const nextGroups = refreshGroups(nextGroupState.groups, nextTaskState.tasks);
-        syncLocalBackup(
-          authUser.uid,
+        persistWorkingSnapshot(
+          uid,
           nextTaskState.tasks,
           nextGroups,
           nextGroupState.workspaceRevision
@@ -422,20 +551,21 @@ export const useAppStore = create((set, get) => ({
 
   reorderGroups: async (nextGroups) => {
     const { authUser, tasks, workspaceRevision } = get();
-    if (!authUser || !Array.isArray(nextGroups) || nextGroups.length === 0) {
+    const uid = authUser?.uid ?? null;
+    if (!Array.isArray(nextGroups) || nextGroups.length === 0) {
       return;
     }
 
     try {
       const nextGroupState = await groupService.reorderGroups(
-        authUser.uid,
+        uid,
         nextGroups,
         workspaceRevision
       );
 
       set((state) => {
         const refreshedGroups = refreshGroups(nextGroupState.groups, tasks);
-        syncLocalBackup(authUser.uid, tasks, refreshedGroups, nextGroupState.workspaceRevision);
+        persistWorkingSnapshot(uid, tasks, refreshedGroups, nextGroupState.workspaceRevision);
 
         return {
           groups: refreshedGroups,
@@ -452,15 +582,17 @@ export const useAppStore = create((set, get) => ({
     }
   },
 
+  // CRUD task -------------------------------------------------------------
+  //
+  // Stesso pattern dei gruppi: mutazione delegata, aggiornamento store,
+  // persistenza dello snapshot di lavoro.
   createTask: async (taskData) => {
     const { authUser, tasks: currentTasks, workspaceRevision } = get();
-    if (!authUser) {
-      return;
-    }
+    const uid = authUser?.uid ?? null;
 
     try {
       const nextTaskState = await taskService.createTask(
-        authUser.uid,
+        uid,
         taskData,
         currentTasks,
         workspaceRevision
@@ -470,7 +602,7 @@ export const useAppStore = create((set, get) => ({
         tasks: nextTaskState.tasks,
         groups: (() => {
           const nextGroups = refreshGroups(state.groups, nextTaskState.tasks);
-          syncLocalBackup(authUser.uid, nextTaskState.tasks, nextGroups, nextTaskState.workspaceRevision);
+          persistWorkingSnapshot(uid, nextTaskState.tasks, nextGroups, nextTaskState.workspaceRevision);
           return nextGroups;
         })(),
         workspaceRevision: nextTaskState.workspaceRevision,
@@ -487,13 +619,11 @@ export const useAppStore = create((set, get) => ({
 
   updateTask: async (taskId, updates) => {
     const { authUser, tasks: currentTasks, workspaceRevision } = get();
-    if (!authUser) {
-      return;
-    }
+    const uid = authUser?.uid ?? null;
 
     try {
       const nextTaskState = await taskService.updateTask(
-        authUser.uid,
+        uid,
         taskId,
         updates,
         currentTasks,
@@ -504,7 +634,7 @@ export const useAppStore = create((set, get) => ({
         tasks: nextTaskState.tasks,
         groups: (() => {
           const nextGroups = refreshGroups(state.groups, nextTaskState.tasks);
-          syncLocalBackup(authUser.uid, nextTaskState.tasks, nextGroups, nextTaskState.workspaceRevision);
+          persistWorkingSnapshot(uid, nextTaskState.tasks, nextGroups, nextTaskState.workspaceRevision);
           return nextGroups;
         })(),
         workspaceRevision: nextTaskState.workspaceRevision,
@@ -520,13 +650,11 @@ export const useAppStore = create((set, get) => ({
 
   deleteTask: async (taskId) => {
     const { authUser, tasks: currentTasks, workspaceRevision } = get();
-    if (!authUser) {
-      return;
-    }
+    const uid = authUser?.uid ?? null;
 
     try {
       const nextTaskState = await taskService.deleteTask(
-        authUser.uid,
+        uid,
         taskId,
         currentTasks,
         workspaceRevision
@@ -536,7 +664,7 @@ export const useAppStore = create((set, get) => ({
         tasks: nextTaskState.tasks,
         groups: (() => {
           const nextGroups = refreshGroups(state.groups, nextTaskState.tasks);
-          syncLocalBackup(authUser.uid, nextTaskState.tasks, nextGroups, nextTaskState.workspaceRevision);
+          persistWorkingSnapshot(uid, nextTaskState.tasks, nextGroups, nextTaskState.workspaceRevision);
           return nextGroups;
         })(),
         workspaceRevision: nextTaskState.workspaceRevision,
@@ -552,13 +680,11 @@ export const useAppStore = create((set, get) => ({
 
   toggleTaskComplete: async (taskId) => {
     const { authUser, tasks: currentTasks, workspaceRevision } = get();
-    if (!authUser) {
-      return;
-    }
+    const uid = authUser?.uid ?? null;
 
     try {
       const nextTaskState = await taskService.toggleTaskComplete(
-        authUser.uid,
+        uid,
         taskId,
         currentTasks,
         workspaceRevision
@@ -568,7 +694,7 @@ export const useAppStore = create((set, get) => ({
         tasks: nextTaskState.tasks,
         groups: (() => {
           const nextGroups = refreshGroups(state.groups, nextTaskState.tasks);
-          syncLocalBackup(authUser.uid, nextTaskState.tasks, nextGroups, nextTaskState.workspaceRevision);
+          persistWorkingSnapshot(uid, nextTaskState.tasks, nextGroups, nextTaskState.workspaceRevision);
           return nextGroups;
         })(),
         workspaceRevision: nextTaskState.workspaceRevision,
@@ -582,6 +708,7 @@ export const useAppStore = create((set, get) => ({
     }
   },
 
+  // Helpers di sola interfaccia persistiti nel browser.
   setActiveTab: (tab) => {
     set({ activeTab: tab });
   },

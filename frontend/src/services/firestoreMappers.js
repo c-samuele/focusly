@@ -1,16 +1,33 @@
+// Mapper tra modello applicativo e rappresentazione Firestore.
+//
+// Questo file non parla con Firestore direttamente, ma e strettamente
+// coinvolto nel contratto dati client/server: stabilisce come i dati
+// vengono serializzati prima dell'invio e come vengono deserializzati
+// una volta letti dal backend Firebase.
+//
+// Punto chiave:
+// Firestore usa `Timestamp` per molte date, mentre l'app usa stringhe ISO
+// e date chiave come `YYYY-MM-DD`. Qui avviene tutta la conversione.
 import { Timestamp } from 'firebase/firestore';
 import { createGroup } from '../model/Group';
 import { createTask, getTodayDate } from '../model/Task';
 
+// Utility di formattazione base per date UTC.
 const pad = (value) => String(value).padStart(2, '0');
 
+// Verifica rigorosa di oggetto Date valido.
 const isDateObject = (value) => value instanceof Date && !Number.isNaN(value.getTime());
 
+// Riconosce strutture compatibili con il Timestamp Firestore.
+// Non leghiamo il check a una sola classe concreta, ma alla presenza di
+// `toDate()`, cosi il mapper resta robusto anche con dati mockati.
 const isTimestampLike = (value) =>
   value &&
   typeof value === 'object' &&
   typeof value.toDate === 'function';
 
+// Interpreta stringhe `YYYY-MM-DD` come date UTC.
+// Serve soprattutto per le date logiche dei task pianificati.
 const parseDateKey = (value) => {
   if (typeof value !== 'string') {
     return null;
@@ -29,6 +46,12 @@ const parseDateKey = (value) => {
   return Number.isNaN(date.getTime()) ? null : date;
 };
 
+// Normalizza qualunque input data-like in un vero oggetto Date o `null`.
+// Accetta:
+// - Timestamp Firestore
+// - Date native
+// - stringhe ISO
+// - date key `YYYY-MM-DD`
 const toDateObject = (value) => {
   if (value == null) {
     return null;
@@ -56,11 +79,13 @@ const toDateObject = (value) => {
   return null;
 };
 
+// Converte un valore data-like in Timestamp Firestore, se possibile.
 const toTimestampOrNull = (value) => {
   const date = toDateObject(value);
   return date ? Timestamp.fromDate(date) : null;
 };
 
+// Converte un input data-like in una `date key` coerente con l'app.
 const toDateKeyOrFallback = (value, fallback = getTodayDate()) => {
   const date = toDateObject(value);
   if (!date) {
@@ -70,16 +95,20 @@ const toDateKeyOrFallback = (value, fallback = getTodayDate()) => {
   return `${date.getUTCFullYear()}-${pad(date.getUTCMonth() + 1)}-${pad(date.getUTCDate())}`;
 };
 
+// Converte un input data-like in stringa ISO, usata dal frontend.
 const toIsoStringOrNull = (value) => {
   const date = toDateObject(value);
   return date ? date.toISOString() : null;
 };
 
+// Parser numerico difensivo con fallback esplicito.
 const toNumberOrDefault = (value, fallback = 0) => {
   const number = Number(value);
   return Number.isFinite(number) ? number : fallback;
 };
 
+// Serializzazione task -> Firestore.
+// Qui definiamo lo shape effettivo del documento remoto task.
 export const mapTaskToFirestore = (task = {}, order = 0) => ({
   title: String(task.title ?? ''),
   desc: String(task.desc ?? ''),
@@ -95,6 +124,7 @@ export const mapTaskToFirestore = (task = {}, order = 0) => ({
   updatedAt: Timestamp.fromDate(new Date()),
 });
 
+// Deserializzazione task Firestore -> modello frontend.
 export const mapTaskFromFirestore = (taskId, data = {}) =>
   createTask({
     id: taskId,
@@ -111,6 +141,7 @@ export const mapTaskFromFirestore = (taskId, data = {}) =>
     completedAt: data.completed ? toIsoStringOrNull(data.completedAt ?? data.createdAt) : null,
   });
 
+// Serializzazione gruppo -> Firestore.
 export const mapGroupToFirestore = (group = {}, order = 0) => ({
   name: String(group.name ?? ''),
   type: group.type ?? 'custom',
@@ -119,6 +150,7 @@ export const mapGroupToFirestore = (group = {}, order = 0) => ({
   updatedAt: Timestamp.fromDate(new Date()),
 });
 
+// Deserializzazione gruppo Firestore -> modello frontend.
 export const mapGroupFromFirestore = (groupId, data = {}, milestones = []) =>
   createGroup({
     id: groupId,
@@ -130,6 +162,7 @@ export const mapGroupFromFirestore = (groupId, data = {}, milestones = []) =>
     milestones,
   });
 
+// Serializzazione milestone -> Firestore.
 export const mapMilestoneToFirestore = (milestone = {}, order = 0) => ({
   description: String(milestone.description ?? ''),
   completed: Boolean(milestone.completed),
@@ -137,6 +170,7 @@ export const mapMilestoneToFirestore = (milestone = {}, order = 0) => ({
   updatedAt: Timestamp.fromDate(new Date()),
 });
 
+// Deserializzazione milestone Firestore -> modello frontend.
 export const mapMilestoneFromFirestore = (milestoneId, data = {}) => ({
   id: milestoneId,
   description: data.description ?? '',
@@ -144,6 +178,8 @@ export const mapMilestoneFromFirestore = (milestoneId, data = {}) => ({
   order: toNumberOrDefault(data.order, 0),
 });
 
+// Deserializzazione del documento profilo utente.
+// Questo e il punto in cui i metadati Firebase diventano stato applicativo.
 export const mapUserProfileFromFirestore = (uid, data = {}) => ({
   uid,
   displayName: data.displayName ?? '',

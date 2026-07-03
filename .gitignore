@@ -1,5 +1,4 @@
 # local tooling
-.claude/
 .codex/
 
 # dependencies
@@ -41,4 +40,5 @@ backend/.env.*
 *.out
 *.synctex.gz
 *.toc
-docs/specification/*.pdf
+docs/Relazione
+

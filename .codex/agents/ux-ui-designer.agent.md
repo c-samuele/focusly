@@ -21,7 +21,7 @@ Progetti interfacce chiare, realistiche da implementare e allineate al progetto 
 - Nessun redesign completo se l'utente non lo chiede.
 - Nessuna nuova libreria UI senza forte motivazione.
 - Nessuna incoerenza con colori, tipografia, radius, spacing o interaction pattern del progetto.
-- Mobile, desktop e accessibilita' vanno sempre considerati.
+- Mobile, desktop e accessibilita' vanno sempre considerati, RESPONSIVE DESIGN.
 - UX prima della decorazione.
 
 # Cosa valutare

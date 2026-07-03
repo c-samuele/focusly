@@ -13,10 +13,16 @@ function Header({
   isFullscreen,
   onToggleFullscreen,
   authUser,
+  authStatus,
+  isGuestMode,
+  onSignIn,
   onSignOut,
 }) {
   const [avatarLoadFailed, setAvatarLoadFailed] = useState(false);
   const avatarUrl = authUser?.photoURL || '';
+  const accountName = isGuestMode ? 'Offline guest' : authUser?.displayName || 'Google User';
+  const accountLabel = isGuestMode ? 'Local workspace on this browser' : authUser?.email || 'Authenticated session';
+  const accountInitial = (accountName || 'U').slice(0, 1).toUpperCase();
 
   useEffect(() => {
     setAvatarLoadFailed(false);
@@ -53,13 +59,14 @@ function Header({
             />
           ) : (
             <span className="dashboard-header__avatar dashboard-header__avatar--fallback">
-              {(authUser?.displayName || authUser?.email || 'U').slice(0, 1).toUpperCase()}
+              {accountInitial}
             </span>
           )}
           <div className="dashboard-header__account-copy">
-            <strong>{authUser?.displayName || 'Google User'}</strong>
-            <span>{authUser?.email || 'Authenticated session'}</span>
+            <strong>{accountName}</strong>
+            <span>{accountLabel}</span>
           </div>
+          {isGuestMode ? <span className="dashboard-header__account-badge">Local only</span> : null}
         </div>
 
         <Button
@@ -91,15 +98,28 @@ function Header({
           <i className={`bi ${isFullscreen ? 'bi-fullscreen-exit' : 'bi-fullscreen'}`} aria-hidden="true" />
         </Button>
 
-        <Button
-          variant="ghost"
-          className="dashboard-header__tool-button dashboard-header__tool-button--logout dashboard-header__logout-button icon-button"
-          onClick={onSignOut}
-          aria-label="Esci"
-          title="Esci"
-        >
-          <i className="bi bi-box-arrow-right" aria-hidden="true" />
-        </Button>
+        {authStatus === 'guest' ? (
+          <Button
+            variant="ghost"
+            className="dashboard-header__tool-button dashboard-header__login-button"
+            onClick={onSignIn}
+            aria-label="Accedi con Google"
+            title="Accedi con Google"
+          >
+            <i className="bi bi-google" aria-hidden="true" />
+            <span>Google</span>
+          </Button>
+        ) : (
+          <Button
+            variant="ghost"
+            className="dashboard-header__tool-button dashboard-header__tool-button--logout dashboard-header__logout-button icon-button"
+            onClick={onSignOut}
+            aria-label="Esci"
+            title="Esci"
+          >
+            <i className="bi bi-box-arrow-right" aria-hidden="true" />
+          </Button>
+        )}
       </div>
     </header>
   );

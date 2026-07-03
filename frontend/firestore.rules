@@ -2,32 +2,51 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
+    // Helper base: ogni accesso al workspace cloud richiede una sessione
+    // Firebase Auth valida.
     function isSignedIn() {
       return request.auth != null;
     }
 
+    // Helper di ownership:
+    // un utente puo leggere e scrivere solo dentro il proprio nodo
+    // `users/{uid}` e relative sotto-collezioni.
     function isOwner(uid) {
       return isSignedIn() && request.auth.uid == uid;
     }
 
+    // Documento principale del profilo/workspace utente.
     match /users/{uid} {
+      // Il proprietario puo leggere il proprio profilo.
       allow read: if isOwner(uid);
+
+      // Il proprietario puo creare e aggiornare il proprio documento.
+      // Questo permette al frontend di fare upsert del profilo
+      // subito dopo il login Google.
       allow create, update: if isOwner(uid);
+
+      // La cancellazione completa del nodo utente e disabilitata:
+      // e una scelta prudente per evitare distruzioni accidentali.
       allow delete: if false;
 
+      // Task dell'utente autenticato.
       match /tasks/{taskId} {
         allow read, write: if isOwner(uid);
       }
 
+      // Gruppi dell'utente autenticato.
       match /groups/{groupId} {
         allow read, write: if isOwner(uid);
 
+        // Milestone annidate sotto ogni gruppo.
         match /milestones/{milestoneId} {
           allow read, write: if isOwner(uid);
         }
       }
     }
 
+    // Default deny globale:
+    // qualunque path non esplicitamente autorizzato resta inaccessibile.
     match /{document=**} {
       allow read, write: if false;
     }

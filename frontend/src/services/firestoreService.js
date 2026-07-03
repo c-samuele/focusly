@@ -1,3 +1,16 @@
+// Service centrale di accesso a Cloud Firestore.
+//
+// Qui vive tutto il collegamento dati tra frontend e backend Firebase:
+// - costruzione dei path document/collection
+// - letture one-shot del workspace
+// - scritture CRUD su user, task, group e milestone
+// - batch write per mantenere coerenza tra piu documenti
+// - supporto alla migrazione dal backup locale verso il cloud
+//
+// Nota architetturale:
+// questo modulo non contiene UI e non decide quando fare le chiamate.
+// Quello e compito dello store. Qui ci limitiamo a tradurre intenzioni
+// applicative in operazioni Firestore.
 import {
   collection,
   doc,
@@ -23,6 +36,9 @@ import {
   mapUserProfileFromFirestore,
 } from './firestoreMappers';
 
+// Riferimenti Firestore centralizzati.
+// In questo modo l'intera struttura del database resta dichiarata in un solo
+// posto, piu facile da leggere e da cambiare se la gerarchia evolve.
 const getUserRef = (uid) => doc(db, 'users', uid);
 const getTasksCollectionRef = (uid) => collection(db, 'users', uid, 'tasks');
 const getTaskRef = (uid, taskId) => doc(db, 'users', uid, 'tasks', taskId);
@@ -34,6 +50,9 @@ const normalizeWorkspaceRevision = (value) => (
   Number.isFinite(Number(value)) ? Number(value) : 0
 );
 
+// Ogni mutazione remota incrementa la revisione del workspace utente.
+// La revisione viene usata dallo store per capire se lo snapshot locale
+// e ancora allineato a quello cloud.
 const queueWorkspaceRevisionUpdate = (batch, uid) => {
   batch.set(
     getUserRef(uid),
@@ -44,11 +63,22 @@ const queueWorkspaceRevisionUpdate = (batch, uid) => {
   );
 };
 
+// Legge le milestone di un gruppo con ordinamento stabile.
+// E una lettura remota puntuale, non una subscription realtime.
 const listMilestones = async (uid, groupId) => {
   const snapshot = await getDocs(query(getMilestonesCollectionRef(uid, groupId), orderBy('order', 'asc')));
   return snapshot.docs.map((docSnapshot) => mapMilestoneFromFirestore(docSnapshot.id, docSnapshot.data()));
 };
 
+// Sincronizza la sotto-collezione delle milestone per un gruppo.
+//
+// Il comportamento cambia in base alle opzioni:
+// - `mergeOnly: true`   -> aggiorna/crea senza cancellare il resto
+// - `mergeOnly: false`  -> allinea davvero l'insieme finale, eliminando
+//                          anche le milestone non piu presenti
+//
+// Se riceve `existingBatch`, si aggancia al batch gia aperto dal chiamante;
+// altrimenti ne crea uno proprio e lo committa in autonomia.
 const syncMilestonesForGroup = async (
   uid,
   groupId,
@@ -90,11 +120,14 @@ const syncMilestonesForGroup = async (
   }
 };
 
+// Legge tutti i task dell'utente ordinati per `order`.
 const listTasks = async (uid) => {
   const snapshot = await getDocs(query(getTasksCollectionRef(uid), orderBy('order', 'asc')));
   return snapshot.docs.map((docSnapshot) => mapTaskFromFirestore(docSnapshot.id, docSnapshot.data()));
 };
 
+// Legge tutti i gruppi e, per ciascuno, anche la relativa sotto-collezione
+// `milestones`. Il risultato finale e gia pronto per l'applicazione.
 const listGroups = async (uid) => {
   const snapshot = await getDocs(query(getGroupsCollectionRef(uid), orderBy('order', 'asc')));
   const groups = await Promise.all(
@@ -107,6 +140,8 @@ const listGroups = async (uid) => {
   return groups;
 };
 
+// Legge il documento utente `users/{uid}` che contiene i metadati del profilo
+// e del workspace, inclusa la revisione e lo stato della migrazione.
 const getUserProfile = async (uid) => {
   const snapshot = await getDoc(getUserRef(uid));
   if (!snapshot.exists()) {
@@ -116,6 +151,11 @@ const getUserProfile = async (uid) => {
   return mapUserProfileFromFirestore(uid, snapshot.data());
 };
 
+// Esegue l'upsert del profilo Firebase dell'utente autenticato.
+//
+// Questo e uno dei primi punti di contatto tra sessione Auth e Firestore:
+// al login prendiamo i dati base dell'utente Google e li persistiamo
+// nel documento `users/{uid}`.
 const upsertUserProfile = async (user) => {
   const userRef = getUserRef(user.uid);
   const snapshot = await getDoc(userRef);
@@ -157,6 +197,9 @@ const upsertUserProfile = async (user) => {
   });
 };
 
+// Carica in parallelo l'intero snapshot remoto necessario al bootstrap.
+// Lo store usa questa funzione per ottenere una vista consistente
+// del workspace senza dover orchestrare da solo le singole query.
 const loadUserData = async (uid, userProfile = null) => {
   const [resolvedUserProfile, tasks, groups] = await Promise.all([
     userProfile ? Promise.resolve(userProfile) : getUserProfile(uid),
@@ -171,6 +214,9 @@ const loadUserData = async (uid, userProfile = null) => {
   };
 };
 
+// Marca come completata la migrazione dal locale verso Firestore.
+// Serve soprattutto per non ripetere importazioni automatiche inutili
+// ai login successivi.
 const markMigrationComplete = async (uid, source = 'localStorage') => {
   await setDoc(
     getUserRef(uid),
@@ -185,6 +231,14 @@ const markMigrationComplete = async (uid, source = 'localStorage') => {
   );
 };
 
+// Importa nel cloud lo snapshot locale dell'app.
+//
+// Questo metodo e il motore del "sync" presente nell'interfaccia:
+// prende task e gruppi dal browser e li copia in Firestore.
+//
+// Non e una sync bidirezionale completa: e un import/merge dal locale
+// verso il cloud, con supporto a batch write per ridurre il rischio
+// di stati parziali.
 const importLocalData = async (uid, appData, { source = 'localStorage', mergeOnly = true } = {}) => {
   const tasks = Array.isArray(appData?.tasks) ? appData.tasks : [];
   const groups = Array.isArray(appData?.groups) ? appData.groups : [];
@@ -245,6 +299,12 @@ const importLocalData = async (uid, appData, { source = 'localStorage', mergeOnl
 
 };
 
+// CRUD task ---------------------------------------------------------------
+//
+// Ogni operazione:
+// - modifica il documento task
+// - incrementa `workspaceRevision` nel documento utente
+// - ritorna la revisione attesa lato client
 const createTask = async (uid, task, order, currentWorkspaceRevision = 0) => {
   const batch = writeBatch(db);
   batch.set(getTaskRef(uid, task.id), mapTaskToFirestore(task, order), { merge: true });
@@ -269,6 +329,9 @@ const deleteTask = async (uid, taskId, currentWorkspaceRevision = 0) => {
   return normalizeWorkspaceRevision(currentWorkspaceRevision) + 1;
 };
 
+// Elimina tutti i task associati a un gruppo.
+// Se il chiamante conosce gia gli id, li usa direttamente.
+// Altrimenti esegue una query remota con filtro `where`.
 const deleteTasksByGroup = async (uid, groupId, taskIds = null, currentWorkspaceRevision = 0) => {
   const batch = writeBatch(db);
 
@@ -288,6 +351,10 @@ const deleteTasksByGroup = async (uid, groupId, taskIds = null, currentWorkspace
   return normalizeWorkspaceRevision(currentWorkspaceRevision) + 1;
 };
 
+// CRUD group --------------------------------------------------------------
+//
+// Oltre al documento gruppo, qui dobbiamo gestire anche la sotto-collezione
+// `milestones`, per cui le operazioni sono leggermente piu ricche dei task.
 const createGroup = async (uid, group, order, currentWorkspaceRevision = 0) => {
   const batch = writeBatch(db);
   batch.set(getGroupRef(uid, group.id), mapGroupToFirestore(group, order), { merge: true });
@@ -309,6 +376,8 @@ const updateGroup = async (uid, group, order, previousMilestoneIds, currentWorks
   return normalizeWorkspaceRevision(currentWorkspaceRevision) + 1;
 };
 
+// Elimina un gruppo e tutte le sue milestone.
+// Anche qui, se gli id sono gia noti, evitiamo una lettura remota in piu.
 const deleteGroup = async (uid, groupId, milestoneIds = null, currentWorkspaceRevision = 0) => {
   const batch = writeBatch(db);
 
@@ -329,6 +398,7 @@ const deleteGroup = async (uid, groupId, milestoneIds = null, currentWorkspaceRe
   return normalizeWorkspaceRevision(currentWorkspaceRevision) + 1;
 };
 
+// Persiste il nuovo ordinamento dei gruppi.
 const reorderGroups = async (uid, groups = [], currentWorkspaceRevision = 0) => {
   const batch = writeBatch(db);
 
@@ -345,6 +415,9 @@ const reorderGroups = async (uid, groups = [], currentWorkspaceRevision = 0) => 
   return normalizeWorkspaceRevision(currentWorkspaceRevision) + 1;
 };
 
+// Aggiorna solo i metadati di migrazione nel documento utente.
+// Viene usato quando vogliamo registrare l'origine dell'ultimo import
+// senza dover riscrivere l'intero profilo.
 const updateUserMigrationSource = async (uid, source) => {
   await updateDoc(getUserRef(uid), {
     'migration.source': source,
@@ -353,6 +426,7 @@ const updateUserMigrationSource = async (uid, source) => {
   });
 };
 
+// API pubblica del service Firestore.
 export const firestoreService = {
   createGroup,
   createTask,

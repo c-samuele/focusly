@@ -50,6 +50,9 @@ function Dashboard() {
     statsPeriod,
     setStatsPeriod,
     authUser,
+    authStatus,
+    isGuestMode,
+    signInWithGoogle,
     signOut,
     reimportLocalData,
     isReimporting,
@@ -329,6 +332,9 @@ function Dashboard() {
             isFullscreen={isFullscreen}
             onToggleFullscreen={toggleFullscreen}
             authUser={authUser}
+            authStatus={authStatus}
+            isGuestMode={isGuestMode}
+            onSignIn={signInWithGoogle}
             onSignOut={signOut}
           />
         )}
@@ -387,7 +393,9 @@ function Dashboard() {
                 pendingTasksCount={pendingTasksCount}
                 selectedGroupName={selectedGroup?.name ?? ''}
                 migrationSource={migrationSource}
+                isGuestMode={isGuestMode}
                 isReimporting={isReimporting}
+                onSignIn={signInWithGoogle}
                 onOpenSyncModal={handleOpenSyncModal}
                 onShowAnalytics={handleShowAnalytics}
               />

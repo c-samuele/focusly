@@ -7391,9 +7391,9 @@ summary,
   place-items: center;
   padding: 32px 20px;
   background:
-    radial-gradient(circle at top left, rgba(255, 178, 0, 0.22), transparent 32%),
-    radial-gradient(circle at bottom right, rgba(36, 122, 107, 0.16), transparent 28%),
-    linear-gradient(160deg, #f3faf8 0%, #e7f4ef 52%, #dcece6 100%);
+    radial-gradient(circle at top left, color-mix(in srgb, var(--primary-color) 16%, transparent) 0%, transparent 32%),
+    radial-gradient(circle at bottom right, color-mix(in srgb, var(--badge-bg) 42%, transparent) 0%, transparent 28%),
+    linear-gradient(160deg, color-mix(in srgb, var(--shell-bg) 54%, transparent) 0%, color-mix(in srgb, var(--content-bg) 92%, transparent) 100%);
 }
 
 .bootstrap-screen {
@@ -7547,11 +7547,12 @@ summary,
   width: min(560px, 100%);
   padding: 32px;
   border-radius: 28px;
-  background: rgba(255, 255, 255, 0.9);
-  border: 1px solid rgba(15, 23, 42, 0.08);
-  box-shadow: 0 22px 70px rgba(15, 23, 42, 0.14);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--panel-bg) 94%, transparent) 0%, color-mix(in srgb, var(--floating-bg) 90%, transparent) 100%);
+  border: 1px solid color-mix(in srgb, var(--card-border) 84%, transparent);
+  box-shadow: var(--panel-shadow);
   display: grid;
   gap: 18px;
+  backdrop-filter: blur(16px);
 }
 
 .auth-card--signin {
@@ -7603,12 +7604,46 @@ summary,
 .auth-card__actions {
   display: flex;
   justify-content: center;
+  flex-wrap: wrap;
+  gap: 12px;
 }
 
 .auth-card__actions .button {
   display: inline-flex;
   align-items: center;
   gap: 8px;
+}
+
+.auth-card__hint {
+  max-width: 58ch;
+  font-size: 0.92rem;
+}
+
+.auth-card__mode-grid {
+  width: 100%;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.auth-card__mode {
+  display: grid;
+  gap: 6px;
+  padding: 16px 18px;
+  border-radius: 20px;
+  background: color-mix(in srgb, var(--panel-bg) 76%, transparent);
+  border: 1px solid color-mix(in srgb, var(--card-border) 80%, transparent);
+  text-align: left;
+}
+
+.auth-card__mode strong {
+  color: var(--text-color);
+}
+
+.auth-card__mode span {
+  color: var(--muted-color);
+  font-size: 0.92rem;
+  line-height: 1.45;
 }
 
 .auth-card__quote {
@@ -7640,8 +7675,8 @@ summary,
   width: fit-content;
   padding: 6px 10px;
   border-radius: 999px;
-  background: rgba(255, 178, 0, 0.14);
-  color: #247a6b;
+  background: color-mix(in srgb, var(--primary-color) 14%, transparent);
+  color: var(--primary-color);
   font-size: 0.78rem;
   font-weight: 700;
   letter-spacing: 0.08em;
@@ -7663,6 +7698,9 @@ summary,
 }
 
 .dashboard-header__account {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   margin-right: 0;
 }
 
@@ -7705,9 +7743,29 @@ summary,
   color: var(--muted-color);
 }
 
+.dashboard-header__account-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--primary-color) 16%, transparent);
+  color: var(--primary-color);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
 .dashboard-header__tool-button--logout.button--ghost {
   background: color-mix(in srgb, var(--danger-color) 12%, var(--ghost-bg));
   color: color-mix(in srgb, var(--danger-color) 82%, var(--ghost-color));
+}
+
+.dashboard-header__login-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .panel--group-workspace {
@@ -8150,6 +8208,10 @@ summary,
 
   .auth-card__actions .button {
     justify-content: center;
+  }
+
+  .auth-card__mode-grid {
+    grid-template-columns: 1fr;
   }
 
   .group-workspace__stats,
