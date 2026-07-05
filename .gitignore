@@ -40,5 +40,5 @@ backend/.env.*
 *.out
 *.synctex.gz
 *.toc
-docs/Relazione
+# docs/Relazione
 
