@@ -1,0 +1,277 @@
+\documentclass[11pt,a4paper]{article}
+
+% Librerie e pacchetti
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[italian]{babel}
+\usepackage[margin=2.4cm]{geometry}
+\usepackage{hyperref}
+\usepackage{array}
+\usepackage{booktabs}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{enumitem}
+\usepackage{dirtree}
+\usepackage{graphicx}
+\usepackage{titlesec}
+
+% Impostazioni di stile
+\hypersetup{
+  colorlinks=true,
+  linkcolor=black,
+  urlcolor=blue
+}
+
+\renewcommand{\contentsname}{Indice}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0.45em}
+\emergencystretch=2em
+\setlist[itemize]{topsep=2pt,itemsep=2pt,leftmargin=1.2cm}
+\setlist[enumerate]{topsep=2pt,itemsep=2pt,leftmargin=1.2cm}
+
+\lstset{
+  basicstyle=\ttfamily\small,
+  breaklines=true,
+  frame=single,
+  backgroundcolor=\color{black!3}
+}
+
+% Comandi 
+\newcommand{\sectionbreak}{\clearpage}
+
+%  INIZIO DOCUMENTO
+
+
+% Copertina
+\title{
+    \textbf{Progetto di\\ Reti di Calcolatori}\\[1.2cm]
+    % \includegraphics[width=0.15\textwidth]{logo.png}\\[0.3cm]
+    {\large \textbf{Focusly}\\[0.5cm] SPA con architettura Client-Server per la pianificazione delle attività}
+}
+
+\author{
+    Samuele Caporale\\
+    Matricola 329096\\
+    A.A. 2025/2026
+}
+\date{}
+
+\begin{document}
+\maketitle
+\clearpage
+\tableofcontents
+\newpage
+
+\section{Introduzione}
+
+Focusly nasce come progetto orientato alla pianificazione dello studio attraverso una web application in grado di organizzare task, gruppi tematici e milestone all'interno di un'unica interfaccia. L'idea di partenza é offrire uno strumento semplice per l'utente finale, ma progettato secondo criteri moderni, con autenticazione remota, persistenza cloud e possibilità di mantenere una continuità d'uso anche in presenza di dati locali salvati nel browser.
+
+La scelta di sviluppare e analizzare questo progetto nel contesto di Reti di Calcolatori deriva dall'interesse per le applicazioni web che affidano parte rilevante della loro logica a servizi distribuiti raggiunti tramite rete. In Focusly, infatti, la componente significativa non riguarda soltanto l'interfaccia grafica, ma soprattutto il modo in cui il browser interagisce con servizi cloud esterni per autenticare l'utente, memorizzare il workspace personale e riallineare le informazioni tra sessioni diverse.
+
+La presente relazione ha quindi l'obiettivo di descrivere la specifica del progetto, le tecnologie adottate e le principali scelte architetturali, mettendo in evidenza i motivi per cui é stata preferita una soluzione client-cloud basata su Firebase.
+
+\section{Specifica di Progetto}
+
+\par L'obiettivo del progetto é la realizzazione di un'applicazione web per la pianificazione e gestione di task organizzati in gruppi tematici, con milestone e statistiche di analisi. La specifica si concentra quindi su un sistema che unisca semplicità d'uso, accesso remoto ai dati e una struttura abbastanza modulare da poter evolvere nel tempo.
+
+\subsection{Requisiti funzionali}
+
+\par Dal punto di vista funzionale, l'applicazione deve consentire agli utenti di:
+\begin{itemize}
+  \item Autenticarsi tramite account Google.
+  \item Creare, modificare e cancellare task, gruppi e milestone.
+  \item Visualizzare statistiche aggregate sui task completati e sulle milestone raggiunte.
+  \item Salvare e sincronizzare i dati su più dispositivi tramite cloud.
+  \item Consentire l'utilizzo offline con sincronizzazione successiva.
+\end{itemize}
+
+\subsection{Requisiti non funzionali}
+
+\par Il sistema deve rispettare alcuni requisiti non funzionali:
+\begin{itemize}
+  \item Essere responsive e compatibile con i principali browser.
+  \item Essere sicuro, isolando i dati degli utenti tramite regole di accesso.
+  \item Essere efficiente, minimizzando le operazioni di rete e ottimizzando le prestazioni.
+\end{itemize}
+
+\newpage
+\section{Architettura e tecnologie utilizzate}
+
+\subsection{Tecnologie utilizzate}
+
+\par Il progetto combina tecnologie web di base, librerie frontend, protocolli di trasporto e servizi cloud. L'insieme risulta coerente con una Single Page Application, nella quale gran parte della logica applicativa viene eseguita sul client, mentre autenticazione e dati persistenti vengono delegati a servizi remoti specializzati.
+
+\begin{itemize}
+  \item \textbf{HTML5, CSS3 e JavaScript ES Modules}\\ Costituiscono la base della SPA eseguita nel browser, definendo struttura, stile e logica applicativa.
+  \item \textbf{React 18 e ReactDOM}\\ Realizzano il rendering dell'interfaccia e la composizione dei componenti della dashboard.
+  \item \textbf{Vite e \texttt{@vitejs/plugin-react}}\\ Gestiscono l'ambiente di sviluppo, il bundling e la compilazione del frontend React.
+  \item \textbf{Bootstrap 5}\\ Fornisce griglia, utility CSS e componenti visuali per il layout responsive.
+  \item \textbf{Bootstrap Icons}\\ Mette a disposizione le icone svg usate nell'interfaccia utente.
+  \item \textbf{Zustand}\\ Implementa lo store globale che coordina stato, bootstrap e azioni asincrone.
+  \item \textbf{Chart.js}\\ Genera i grafici statistici mostrati nella sezione analytics dell'app.
+  \item \textbf{HTTPS}\\ È il protocollo di trasporto usato per le comunicazioni sicure tra browser e servizi remoti.
+  \item \textbf{Firebase JavaScript SDK}\\ Libreria client che integra nel frontend autenticazione e accesso ai servizi cloud.
+  \item \textbf{Firebase Authentication}\\ Gestisce il login con Google e il mantenimento dello stato di sessione utente.
+  \item \textbf{Cloud Firestore}\\ Database NoSQL cloud usato per salvare profili, task, gruppi e milestone.
+  \item \textbf{localStorage}\\ Offre persistenza locale nel browser e supporta la migrazione iniziale dei dati verso Firestore.
+  \item \textbf{Codex}\\ Strumento di supporto alla generazione del codice e all’esecuzione di operazioni sul file system. È stato utilizzato attraverso agenti specializzati, configurati per attività di progettazione UI/UX, sviluppo frontend e coordinamento del flusso di lavoro, con l’obiettivo di accelerare alcune fasi del processo di sviluppo.
+\end{itemize}
+\newpage
+
+\subsection{Workspace}
+
+\par L'architettura prevede un workspace organizzato in più aree: il frontend React costituisce il cuore dell'applicazione, Firebase fornisce i servizi remoti di autenticazione e persistenza, mentre la documentazione e gli script di supporto completano l'organizzazione del repository. La struttura attuale del progetto é la seguente:
+
+\dirtree{%
+.1 root.
+.2 docs/.
+.3 notes/.
+.2 frontend/.
+.3 public/.
+.3 node\_modules/.
+.3 src/.
+.4 components/.
+.4 hooks/.
+.4 lib/.
+.4 model/.
+.4 pages/.
+.4 services/.
+.4 state/.
+.4 utils/.
+.3 firebase.json.
+.3 firestore.rules.
+.3 vite.config.js.
+.2 scripts/.
+.2 package.json.
+}
+
+\par La directory \textbf{docs/} raccoglie la documentazione e le specifiche architetturali per agenti codex. La directory \textbf{frontend/} ospita l'intera app, insieme alla configurazione del client React e dei servizi Firebase, mentre \textbf{scripts/} contiene script di supporto al workspace, utili per lo sviluppo locale e per operazioni accessorie come l'esportazione di dati. I file \textbf{firebase.json}, \textbf{firestore.rules} e \textbf{vite.config.js} sono file di configurazione rispettivamente per l'ambiente Firebase, le regole di sicurezza Firestore e il bundler Vite, mentre \textbf{package.json} definisce metadati, dipendenze e script di esecuzione del progetto frontend.
+
+\par All'interno del frontend, la directory \textbf{public/} contiene le risorse esposte pubblicamente al client come immagini raster e icone vettoriali, la directory \textbf{node\_modules/} raccoglie le dipendenze installate del progetto e i pacchetti necessari al funzionamento dell'ambiente React/Vite, mentre la directory \textbf{src/} contiene il codice sorgente dell'applicazione React. In particolare, \textbf{components/} contiene i componenti visuali riutilizzabili dell'interfaccia, organizzati per area funzionale; \textbf{hooks/} definisce gli hook React usati per incapsulare logiche riutilizzabili, come la gestione dei task, dei gruppi, del timer o di comportamenti della UI; \textbf{lib/} contiene la configurazione di Firebase e l'inizializzazione delle librerie condivise, in modo da centralizzare la configurazione; \textbf{model/} contiene i modelli dati dell'applicazione, come task e gruppi, mantenendo una struttura coerente del dominio; \textbf{pages/} contiene i contenitori ad alto livello delle schermate dell'intera SPA; \textbf{services/} contiene i servizi che gestiscono le operazioni di business logic, autenticazione, persistenza Firestore, migrazione e analisi delle statistiche; \textbf{state/} comprende lo store globale Zustand e la logica di coordinamento dello stato condiviso dell'applicazione; \textbf{utils/} racchiude funzioni di utilità come helper per formattazione, gestione delle date e temi.
+
+\par Il frontend costituisce il nodo applicativo principale. Il flusso operativo di autenticazione, sincronizzazione e persistenza dei dati avviene direttamente tra browser e servizi Firebase.
+
+\subsection{Architettura e Type of Service}
+
+\par Dal punto di vista delle reti di calcolatori, Focusly implementa un'architettura \textbf{Client-Server}, nello specifico Client-Cloud, dove il browser esegue la Single Page Application React e comunica tramite HTTPS con i servizi remoti messi a disposizione da Firebase. 
+\par Questo, dal punto di vista dello sviluppatore, rientra nella tipologia di servizio \textbf{BaaS} in quanto il backend non viene implementato direttamente all'interno del progetto, ma viene delegato alla piattaforma Firebase, che fornisce tramite SDK servizi già pronti di autenticazione e persistenza dei dati.
+
+\par Le interazioni di rete presenti nel sistema sono principalmente di due tipi:
+\begin{itemize}
+  \item autenticazione remota con Google tramite popup, mediata da Firebase Authentication;
+  \item accesso al database Firestore mediante letture, scritture e batch write effettuati dall'SDK Firebase.
+\end{itemize}
+
+\par Questa scelta riduce la complessità infrastrutturale e rende il prototipo di più rapida implementazione, ma comporta anche una maggiore dipendenza dal provider cloud adottato.
+\par Uno degli aspetti principali a favore della scelta architetturale stà nella sincronizzazione dei dati: Viene delegata prevalentemente al server di Firebase. 
+\section{Analisi ed Implementazione}
+
+\subsection{Scelte implementative}
+
+\par Il progetto è stato inizialmente sviluppato come prototipo minimo, con l’obiettivo di validare rapidamente le funzionalità principali dell’applicazione. Successivamente, il sistema è stato esteso in maniera incrementale, mantenendo il codice versionato tramite Git e verificando progressivamente il corretto funzionamento attraverso test end-to-end.
+\par L’adozione di un modello \emph{serverless} client-driven, nel quale il frontend interagisce direttamente con Firebase, ha consentito una rapida implementazione delle funzionalità di base e ha reso possibile utilizzare l’applicazione già durante le fasi di sviluppo.
+
+\subsection{Autenticazione e gestione della sessione}
+\par La configurazione Firebase é centralizzata in \texttt{frontend/src/lib/firebase.js}. Il modulo legge le variabili d'ambiente \texttt{VITE\_FIREBASE\_*}, inizializza l'app Firebase e crea tre oggetti condivisi: \texttt{auth}, \texttt{db} e \texttt{googleProvider}. Questa centralizzazione evita duplicazioni, riduce l'accoppiamento e rende più controllabile l'intero ciclo di inizializzazione.
+
+\par Il provider Google viene inoltre configurato con lingua italiana e con il parametro \texttt{prompt = select\_account}, in modo da rendere esplicita la scelta dell'account. Il modulo \texttt{authService.js} espone quindi le primitive principali per il login, il logout e l'osservazione dello stato di autenticazione tramite \texttt{onAuthStateChanged()}.
+
+\par L'applicazione non effettua interrogazioni continue verso il server per determinare se l'utente sia autenticato: si affida invece al listener di Firebase Auth, che notifica al frontend ogni cambiamento di sessione. Questa soluzione é interessante sia dal punto di vista tecnico sia da quello didattico, perché mostra come sia possibile delegare la gestione dell'identità a un provider affidabile senza dover sviluppare internamente l'intero ciclo di autenticazione.
+
+\par Nel componente radice \texttt{App.jsx}, una \texttt{useEffect} registra la subscription all'autenticazione. Quando Firebase segnala un utente autenticato, lo store Zustand richiama l'azione \texttt{handleAuthStateChange}, aggiorna o crea il profilo su Firestore, valuta l'eventuale migrazione dei dati locali e infine carica lo stato dell'area di lavoro. In caso di assenza di sessione, l'app mostra invece la schermata di login. La business logic di ingresso e uscita dall'app non é quindi distribuita nei componenti di UI, ma concentrata nello store globale.
+
+\subsection{Persistenza cloud, modellazione dati e sicurezza}
+
+\par La persistenza remota è affidata a Cloud Firestore. Il modello dei dati è gerarchico e organizzato per utente: ogni account dispone di uno spazio logico separato, identificato dal proprio \texttt{uid}.
+
+\begin{lstlisting}
+users/{uid}
+users/{uid}/tasks/{taskId}
+users/{uid}/groups/{groupId}
+users/{uid}/groups/{groupId}/milestones/{milestoneId}
+\end{lstlisting}
+
+\par La collezione \texttt{users} contiene il profilo e i metadati di sincronizzazione, mentre le sottocollezioni \texttt{tasks} e \texttt{groups} rappresentano il workspace dell'utente; ciascun gruppo include a sua volta le relative milestone. Questa struttura é semplice, ma molto efficace rispetto al problema affrontato, perché garantisce isolamento logico dei dati e si integra bene con le regole di sicurezza basate su \texttt{uid}.
+
+\par Il modulo \texttt{firestoreMappers.js} svolge un ruolo fondamentale nella conversione tra oggetti del dominio applicativo e documenti Firestore. Esso si occupa della trasformazione delle date in \texttt{Timestamp}, della conversione inversa verso formati leggibili dal frontend e della normalizzazione dei campi principali. Tale scelta evita che i componenti React debbano conoscere il formato interno del database e rappresenta una buona pratica di separazione tra dominio e persistenza.
+
+\par Il modulo più rilevante per la comunicazione dati é \texttt{firestoreService.js}, che costruisce riferimenti tramite \texttt{doc()} e \texttt{collection()} ed esegue letture, query, aggiornamenti mirati e operazioni atomiche mediante \texttt{writeBatch()}. L'uso dei batch write per create, update e delete consente di mantenere coerenti i documenti applicativi e il campo \texttt{workspaceRevision} del profilo utente. Ogni modifica incrementa infatti la revisione del workspace, permettendo all'app di distinguere se il \textit{local storage} sia allineato con lo stato remoto.
+
+\par Anche il tema della sicurezza é stato affrontato in modo coerente. Le regole definite in \texttt{frontend/firestore.rules} consentono lettura e scrittura solo in presenza di un utente autenticato, limitano l'accesso ai soli documenti associati al corretto \texttt{uid}, impediscono la cancellazione del profilo utente e negano di default ogni altro percorso (rispettando il principio del minimo privilegio). Dal punto di vista delle reti, la scelta più rilevante consiste nello spostare il controllo di accesso dal frontend alle regole server-side di Firestore: anche se il client può essere manipolato, il database continua a imporre isolamento tra utenti.
+
+\subsection{Organizzazione del frontend e business logic}
+
+\par Lo store definito in \texttt{frontend/src/state/store.js} é il vero orchestratore dell'applicazione. Ospita lo stato condiviso, come \texttt{tasks}, \texttt{groups}, \texttt{selectedGroupId}, \texttt{authStatus}, \texttt{dataStatus} e \texttt{workspaceRevision}, ma anche le principali azioni asincrone che coordinano bootstrap, migrazione, caricamento remoto e aggiornamento dell'interfaccia.
+
+\par La logica di bootstrap é collocata nello store per un motivo preciso: essa deve coordinare autenticazione, caricamento dei dati, migrazione da \texttt{localStorage} e stato della UI. Se fosse dispersa in molti componenti React, aumenterebbe il rischio di inconsistenze.
+
+\par Il frontend utilizza inoltre un layer di servizi separato: \texttt{taskService} applica la logica CRUD dei task, \texttt{groupService} gestisce gruppi e stato derivato, \texttt{migrationService} governa import e reimport dei dati locali, \texttt{analyticsService} calcola statistiche derivate e \texttt{storageService} realizza la persistenza locale. La logica risulta quindi stratificata: i componenti React invocano azioni dello store, lo store richiama i servizi di dominio, e solo \texttt{firestoreService} conosce i dettagli della persistenza remota.
+
+\par I modelli \texttt{Task.js} e \texttt{Group.js} contribuiscono inoltre a normalizzare la forma dei dati. Alcune regole di business particolarmente rilevanti sono la presenza obbligatoria di identificatore, ordine e data pianificata per i task, il vincolo sui livelli di priorità e il fatto che lo stato del gruppo non venga salvato come verità assoluta, ma ricalcolato dinamicamente dai task del giorno. Questa soluzione riduce la ridondanza, ma richiede una progettazione più attenta della logica di aggiornamento.
+\newpage
+\subsection{Flussi applicativi principali}
+
+\par Il primo login costituisce il flusso di rete più ricco dell'applicazione. La sequenza implementata prevede l'avvio del login Google, l'autenticazione tramite Firebase Auth, la creazione o l'aggiornamento del profilo utente in \texttt{users/\{uid\}}, la verifica dell'eventuale backup locale importabile e il successivo caricamento del workspace. Se la migrazione non é ancora stata eseguita, task, gruppi e milestone vengono copiati in Firestore tramite batch write e il profilo utente viene marcato come già importato.
+
+\par La migrazione avviene in modalità \emph{merge only}: i documenti già presenti vengono aggiornati per identificatore, mentre quelli remoti assenti nel backup locale non vengono cancellati. Si tratta di una scelta prudente, pensata per ridurre il rischio di perdita dati, ma anche di un esempio concreto di compromesso progettuale: la coerenza assoluta viene sacrificata in favore della sicurezza del contenuto già presente nel cloud.
+
+\par Quando l'utente crea o modifica un task, il flusso applicativo coinvolge il componente di dashboard, lo store, \texttt{taskService}, il servizio Firestore e infine l'aggiornamento del backup locale tramite \texttt{syncLocalBackup()}. Un meccanismo analogo viene applicato per update e delete. Il vantaggio é che l'app mantiene coerenti tre livelli distinti: interfaccia React, local storage del browser e stato persistente su Firestore.
+
+\par La gestione dei gruppi risulta leggermente più complessa per la presenza delle milestone. La creazione salva sia il documento del gruppo sia la sottocollezione \texttt{milestones}; l'aggiornamento usa \texttt{syncMilestonesForGroup()} per creare, modificare o rimuovere milestone obsolete; la cancellazione del gruppo implica anche la rimozione dei task collegati e delle milestone associate. Questo flusso coinvolge contemporaneamente struttura dati, persistenza remota e aggiornamento dello stato locale.
+
+\par L'app espone infine una funzione di reimport manuale dalla schermata impostazioni. Tale flusso é utile per riallineare vecchi dati locali con Firestore, ma include una protezione contro account diversi: se il backup locale risulta associato a un altro \texttt{uid}, il reimport viene bloccato esplicitamente. Anche questa scelta evidenzia attenzione alla sicurezza e alla correttezza del dato.
+\newpage
+
+\subsection{Difficoltà, limiti e compromessi progettuali}
+
+\par Durante lo sviluppo sono emersi tre punti critici concreti.
+\par Il primo è stato mantenere coerenti stato React, \texttt{localStorage} e Firestore: per evitare conflitti è stato introdotto il salvataggio centralizzato con \texttt{syncLocalBackup()}, il controllo dell'\texttt{uid} del backup locale e una migrazione \texttt{mergeOnly} in \texttt{importLocalData()}, così da aggiornare i documenti esistenti senza cancellare quelli remoti.
+\par Il secondo ha riguardato le operazioni composte sui gruppi: \texttt{updateGroup()} deve sincronizzare anche la sottocollezione \texttt{milestones} tramite \texttt{syncMilestonesForGroup()}, mentre \texttt{deleteGroup()} va coordinata con \texttt{deleteTasksByGroup()} per rimuovere nello stesso flusso milestone e task collegati, usando \texttt{writeBatch()} e gli ID già presenti nello store per evitare query aggiuntive.
+\par Il terzo ha riguardato i costi di lettura: nella prima versione il bootstrap poteva arrivare a circa 5.000--10.000 letture Firestore, poi ridotte a circa 500 in uso normale mantenendo \texttt{localStorage} come cache persistente e riusandola solo quando \texttt{uid} e \texttt{workspaceRevision} coincidono con il profilo remoto.
+
+
+\par La soluzione adottata presenta comunque diversi punti di forza:
+\begin{itemize}
+  \item autenticazione delegata a un provider affidabile;
+  \item isolamento dei dati tramite regole Firestore per utente;
+  \item uso di batch write per operazioni atomiche;
+  \item \textit{local storage} utile per velocizzare il bootstrap;
+  \item separazione netta tra UI, store, servizi di dominio e persistenza.
+\end{itemize}
+
+\par Esistono tuttavia anche alcuni limiti strutturali:
+\begin{itemize}
+  \item il caricamento dati usa letture esplicite, non listener realtime Firestore;
+  \item l'assenza di un backend custom rende più difficile centralizzare la business logic.
+  \item alcune operazioni complesse, come la cancellazione coordinata di gruppo e task, rimangono gestite interamente nel client;
+  \item la sincronizzazione multi-dispositivo si basa sul refresh e sulla persistenza in cloud dei dati e non su push continuo verso la UI dal server.
+\end{itemize}
+
+\par Focusly rappresenta quindi un esempio di architettura \emph{serverless client-driven}: semplice, efficace per un progetto "in the small", ma meno controllabile di una soluzione con backend applicativo dedicato. Il compromesso é stato scelto consapevole: privilegiare rapidità di sviluppo, chiarezza architetturale e integrazione con servizi gestiti, accettando i limiti di una minore centralizzazione della logica lato server.
+
+\section{Conclusioni}
+\par Gli obiettivi iniziali del progetto possono dirsi raggiunti in misura significativa. Focusly consente infatti di autenticarsi con account Google, creare e gestire task, gruppi e milestone, visualizzare statistiche e mantenere la persistenza dei dati nel cloud, offrendo al tempo stesso un supporto locale utile per il bootstrap e la migrazione. La congruenza tra specifica iniziale e risultato ottenuto appare quindi complessivamente soddisfacente.
+
+\par Dal punto di vista grafico, l'applicazione risulta coerente ai requisiti non funzionali, in quanto:
+  \begin{itemize}
+    \item Risulta Responsive in versione Desktop e Mobile, necessita solo di qualche rifinitura su i breakpoint meno comuni e ciò è accettabile in quanto prototipo. 
+    \item Risulta Sicuro dal punto di visita delle operazioni sui dati, in quanto ogni utente può accedere con il minimo privilegio ai soli dati realtivi al proprio \textit{uid}.
+  \end{itemize}
+
+\par I possibili sviluppi futuri più sensati, riguardano: meccanismi realtime per la sincronizzazione continua e collaborazione tra più utenti, le funzionalità di analisi e il calendario per visualizzare la pianificazione completa su scala più ampia.
+\par In questa prospettiva, Focusly costituisce un prototipo: non un sistema definitivo, ma un progetto coerente e ben impostato, capace di mostrare come le tecnologie cloud moderne possano essere impiegate in modo efficace all'interno di un'applicazione web orientata all'analisi e miglioramento della produttività personale.
+
+\section{Documentation}
+
+\begin{itemize}
+  \item React Documentation, \url{https://react.dev/}
+  \item Vite Documentation, \url{https://vite.dev/guide/}
+  \item Firebase Documentation, \url{https://firebase.google.com/docs}
+  \item Firebase Authentication Documentation, \url{https://firebase.google.com/docs/auth}
+  \item Cloud Firestore Documentation, \url{https://firebase.google.com/docs/firestore}
+  \item Zustand Documentation, \url{https://zustand.docs.pmnd.rs/}
+  \item Bootstrap Documentation, \url{https://getbootstrap.com/docs/5.3/}
+  \item Chart.js Documentation, \url{https://www.chartjs.org/docs/latest/}
+\end{itemize}
+
+\end{document}

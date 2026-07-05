@@ -9,9 +9,7 @@ backend/node_modules/
 # build output
 dist/
 frontend/dist/
-backend/dist/
 coverage/
-docs/
 # environment files
 .env
 .env.*
