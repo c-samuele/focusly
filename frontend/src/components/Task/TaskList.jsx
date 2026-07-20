@@ -4,9 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { getTodayDate } from '../../model/Task';
 import {
   addDaysToDateKey,
-  addMonthsToDateKey,
   formatDayLabel,
-  formatMonthLabel,
   getMonthStartKey,
   isSameMonthKey,
 } from '../../utils/taskDateRange';
@@ -14,20 +12,14 @@ import {
   getGroupAccentStyle,
 } from '../../utils/groupAppearance';
 import Button from '../UI/Button';
+import TaskCalendar from './TaskCalendar';
 import TaskForm from './TaskForm';
 import TaskSection from './TaskSection';
-
-const WEEKDAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
 const PRIORITY_ORDER = {
   high: 3,
   medium: 2,
   low: 1,
-};
-
-const parseDateKey = (value) => {
-  const date = new Date(`${value}T12:00:00`);
-  return Number.isNaN(date.getTime()) ? new Date(`${getTodayDate()}T12:00:00`) : date;
 };
 
 const getCompletedDateKey = (task) => task.completedAt?.slice(0, 10) ?? task.scheduledDate ?? '';
@@ -68,30 +60,6 @@ const sortCompletedTasks = (left, right) => {
   }
 
   return left.title.localeCompare(right.title);
-};
-
-const getMonthMatrix = (monthKey) => {
-  const monthStartKey = getMonthStartKey(monthKey);
-  const monthStartDate = parseDateKey(monthStartKey);
-  const monthIndex = monthStartDate.getMonth();
-  const firstDay = monthStartDate.getDay();
-  const offset = firstDay === 0 ? 6 : firstDay - 1;
-  const gridStart = new Date(monthStartDate);
-  gridStart.setDate(gridStart.getDate() - offset);
-
-  return Array.from({ length: 6 }, (_, weekIndex) => (
-    Array.from({ length: 7 }, (_, dayIndex) => {
-      const nextDate = new Date(gridStart);
-      nextDate.setDate(gridStart.getDate() + weekIndex * 7 + dayIndex);
-      const key = `${nextDate.getFullYear()}-${String(nextDate.getMonth() + 1).padStart(2, '0')}-${String(nextDate.getDate()).padStart(2, '0')}`;
-
-      return {
-        key,
-        dayNumber: nextDate.getDate(),
-        isCurrentMonth: nextDate.getMonth() === monthIndex,
-      };
-    })
-  ));
 };
 
 const getSummaryMeta = ({ view, pendingTasks, completedTasks, overdueCount, today }) => {
@@ -216,7 +184,6 @@ function TaskList({
     }),
     [completedTasks, overduePendingTasks.length, pendingTasks, taskView, today]
   );
-  const calendarDays = useMemo(() => getMonthMatrix(calendarMonth), [calendarMonth]);
   const visibleTasks = useMemo(() => {
     const sourceTasks = taskView === 'completed' ? completedTasks : pendingTasks;
 
@@ -399,53 +366,13 @@ function TaskList({
                   </Button>
 
                   {isCalendarOpen ? (
-                    <div className="task-calendar" role="dialog" aria-label="Task calendar">
-                      <div className="task-calendar__header">
-                        <Button
-                          variant="ghost"
-                          className="task-calendar__nav icon-button"
-                          onClick={() => setCalendarMonth((current) => addMonthsToDateKey(current, -1))}
-                          aria-label="Previous month"
-                        >
-                          <i className="bi bi-chevron-left" aria-hidden="true" />
-                        </Button>
-
-                        <strong>{formatMonthLabel(calendarMonth)}</strong>
-
-                        <Button
-                          variant="ghost"
-                          className="task-calendar__nav icon-button"
-                          onClick={() => setCalendarMonth((current) => addMonthsToDateKey(current, 1))}
-                          aria-label="Next month"
-                        >
-                          <i className="bi bi-chevron-right" aria-hidden="true" />
-                        </Button>
-                      </div>
-
-                      <div className="task-calendar__weekdays" aria-hidden="true">
-                        {WEEKDAY_LABELS.map((label) => (
-                          <span key={label}>{label}</span>
-                        ))}
-                      </div>
-
-                      <div className="task-calendar__grid">
-                        {calendarDays.flat().map((day) => (
-                          <button
-                            key={day.key}
-                            type="button"
-                            className={[
-                              'task-calendar__day',
-                              day.isCurrentMonth ? '' : 'is-muted',
-                              day.key === anchorDate ? 'is-selected' : '',
-                              day.key === today ? 'is-today' : '',
-                            ].filter(Boolean).join(' ')}
-                            onClick={() => handleSelectCalendarDate(day.key)}
-                          >
-                            {day.dayNumber}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
+                    <TaskCalendar
+                      monthKey={calendarMonth}
+                      onMonthChange={setCalendarMonth}
+                      selectedDate={anchorDate}
+                      onSelectDate={handleSelectCalendarDate}
+                      today={today}
+                    />
                   ) : null}
                 </div>
 
@@ -475,29 +402,23 @@ function TaskList({
         <>
           <div className="modal fade show d-block task-modal" tabIndex="-1" role="dialog" aria-modal="true">
             <div className="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable task-modal__dialog">
-              <div className="modal-content">
-                <div className="modal-header">
+              <div className="modal-content task-modal__content">
+                <div className="modal-header task-modal__header">
                   <div className="task-modal__header-wrapper">
                     <div className="task-modal__header-icon">
                       <i className={`bi ${editingTask ? 'bi-pencil-square' : 'bi-journal-plus'}`} aria-hidden="true" />
                     </div>
-                    <div>
-                      <h3 className="modal-title">{editingTask ? 'Refine study block' : 'Compose study block'}</h3>
-                      <p className="task-modal__subtitle">
-                        {editingTask
-                          ? 'Refine this study block with clearer timing, context and focus cues.'
-                          : 'Define the next study block with timing, context and a sharper execution plan.'}
-                      </p>
+                    <div className="task-modal__header-copy">
+                      <h3 className="modal-title">{editingTask ? 'Edit task' : 'New task'}</h3>
                     </div>
                   </div>
 
-                  <div className="task-modal__header-stats">
-                    <span className="task-modal__header-stat">
-                      <span>Group</span>
+                  <div className="task-modal__header-stats" aria-label="Task modal metadata">
+                    <span className="task-modal__header-pill">
+                      <i className="bi bi-collection" aria-hidden="true" />
                       <strong>{groupName || 'Task'}</strong>
                     </span>
-                    <span className="task-modal__header-stat">
-                      <span>Mode</span>
+                    <span className="task-modal__header-pill">
                       <strong>{editingTask ? 'Edit' : 'Create'}</strong>
                     </span>
                   </div>

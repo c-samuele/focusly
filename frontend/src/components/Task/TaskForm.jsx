@@ -2,8 +2,10 @@
 // Lo presenta come composer di uno study block, con sezioni Core / Schedule / Details.
 import { useEffect, useRef, useState } from 'react';
 import { getTodayDate, TASK_TITLE_MAX_LENGTH } from '../../model/Task';
+import { formatDayLabel, getMonthStartKey } from '../../utils/taskDateRange';
 import Button from '../UI/Button';
 import MilestoneDropdown from './MilestoneDropdown';
+import TaskCalendarPopover from './TaskCalendarPopover';
 
 const defaultValues = {
   title: '',
@@ -15,24 +17,62 @@ const defaultValues = {
 };
 
 const PRIORITY_OPTIONS = [
-  { value: 'low', label: 'Low', icon: 'bi-arrow-down-right' },
-  { value: 'medium', label: 'Medium', icon: 'bi-equal' },
-  { value: 'high', label: 'High', icon: 'bi-arrow-up-right' },
+  { value: 'low', label: 'Low', icon: 'bi-arrow-down-right', hint: 'Flexible' },
+  { value: 'medium', label: 'Medium', icon: 'bi-equal', hint: 'Balanced' },
+  { value: 'high', label: 'High', icon: 'bi-arrow-up-right', hint: 'Urgent' },
 ];
+
+const TIMER_STEP_MINUTES = 5;
+
+const formatTimerPart = (value) => String(Math.max(0, Number(value) || 0)).padStart(2, '0');
+
+const getTimerParts = (minutesValue) => {
+  const totalMinutes = Math.max(0, Number(minutesValue) || 0);
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+
+  return {
+    hours: formatTimerPart(hours),
+    minutes: formatTimerPart(minutes),
+  };
+};
+
+const parseTimerPart = (value, max) => {
+  const digits = String(value ?? '').replace(/\D/g, '').slice(0, 2);
+  const parsed = Number.parseInt(digits, 10);
+
+  if (!digits) {
+    return '';
+  }
+
+  return String(Math.min(max, Number.isNaN(parsed) ? 0 : parsed));
+};
 
 function TaskForm({ onSubmit, onCancel, initialValues, submitLabel, disabled, group }) {
   const [formData, setFormData] = useState(defaultValues);
   const [showMilestoneSelector, setShowMilestoneSelector] = useState(false);
+  const [isCalendarOpen, setIsCalendarOpen] = useState(false);
+  const [calendarMonth, setCalendarMonth] = useState(() => getMonthStartKey(getTodayDate()));
+  const [timerHours, setTimerHours] = useState(() => getTimerParts(defaultValues.timer).hours);
+  const [timerMinutes, setTimerMinutes] = useState(() => getTimerParts(defaultValues.timer).minutes);
   const milestoneButtonRef = useRef(null);
   const titleInputRef = useRef(null);
+  const calendarButtonRef = useRef(null);
 
   useEffect(() => {
+    const nextScheduledDate = initialValues?.scheduledDate ?? getTodayDate();
+
     setFormData({
       ...defaultValues,
       ...initialValues,
       timer: initialValues?.timer ?? 0,
-      scheduledDate: initialValues?.scheduledDate ?? getTodayDate(),
+      scheduledDate: nextScheduledDate,
     });
+    setCalendarMonth(getMonthStartKey(nextScheduledDate));
+    setIsCalendarOpen(false);
+    const nextTimerParts = getTimerParts(initialValues?.timer ?? 0);
+    setTimerHours(nextTimerParts.hours);
+    setTimerMinutes(nextTimerParts.minutes);
   }, [initialValues]);
 
   useEffect(() => {
@@ -43,8 +83,9 @@ function TaskForm({ onSubmit, onCancel, initialValues, submitLabel, disabled, gr
 
   const incompleteMilestones = group?.milestones?.filter((milestone) => !milestone.completed) ?? [];
   const isEditing = Boolean(initialValues?.id);
-  const isCompletedTask = Boolean(initialValues?.completed);
   const trimmedTitle = formData.title.trim();
+  const scheduledDate = formData.scheduledDate || getTodayDate();
+  const scheduledDateLabel = formatDayLabel(scheduledDate);
   const isSubmitDisabled = disabled || !trimmedTitle;
 
   const handleChange = (event) => {
@@ -68,6 +109,65 @@ function TaskForm({ onSubmit, onCancel, initialValues, submitLabel, disabled, gr
       title: String(milestone.description ?? '').slice(0, TASK_TITLE_MAX_LENGTH),
     }));
     setShowMilestoneSelector(false);
+  };
+
+  const handleToggleCalendar = () => {
+    setCalendarMonth(getMonthStartKey(scheduledDate));
+    setIsCalendarOpen((current) => !current);
+  };
+
+  const handleSelectCalendarDate = (dateKey) => {
+    setFormData((current) => ({
+      ...current,
+      scheduledDate: dateKey,
+    }));
+    setCalendarMonth(getMonthStartKey(dateKey));
+    setIsCalendarOpen(false);
+  };
+
+  const handleAdjustTimer = (delta) => {
+    setFormData((current) => {
+      const nextTimer = Math.max(0, (Number(current.timer) || 0) + delta);
+      const nextTimerParts = getTimerParts(nextTimer);
+      setTimerHours(nextTimerParts.hours);
+      setTimerMinutes(nextTimerParts.minutes);
+
+      return {
+        ...current,
+        timer: nextTimer,
+      };
+    });
+  };
+
+  const syncTimerParts = (nextHours, nextMinutes) => {
+    const hoursValue = Math.max(0, Number.parseInt(nextHours || '0', 10) || 0);
+    const minutesValue = Math.max(0, Number.parseInt(nextMinutes || '0', 10) || 0);
+    const normalizedHours = hoursValue + Math.floor(minutesValue / 60);
+    const normalizedMinutes = minutesValue % 60;
+    const nextTimer = normalizedHours * 60 + normalizedMinutes;
+
+    setFormData((current) => ({
+      ...current,
+      timer: nextTimer,
+    }));
+    setTimerHours(formatTimerPart(normalizedHours));
+    setTimerMinutes(formatTimerPart(normalizedMinutes));
+  };
+
+  const handleTimerHoursChange = (event) => {
+    const nextHours = parseTimerPart(event.target.value, 99);
+    setTimerHours(nextHours);
+    syncTimerParts(nextHours, timerMinutes);
+  };
+
+  const handleTimerMinutesChange = (event) => {
+    const nextMinutes = parseTimerPart(event.target.value, 59);
+    setTimerMinutes(nextMinutes);
+    syncTimerParts(timerHours, nextMinutes);
+  };
+
+  const handleTimerFieldBlur = () => {
+    syncTimerParts(timerHours, timerMinutes);
   };
 
   const handleSubmit = (event) => {
@@ -98,175 +198,175 @@ function TaskForm({ onSubmit, onCancel, initialValues, submitLabel, disabled, gr
   return (
     <form className="task-form task-composer" onSubmit={handleSubmit}>
       <div className="task-composer__body">
-        <section className="task-composer__hero">
-          <div className="task-composer__hero-copy">
-            <span className="task-composer__eyebrow">Study Block</span>
-            <h4>{isEditing ? 'Refine the task before the next session' : 'Shape the next focus block'}</h4>
-            <p>
-              {isEditing
-                ? 'Update timing, context and notes without losing the rhythm of the workspace.'
-                : 'Give this task a clear outcome, a planned slot and enough context to start with confidence.'}
-            </p>
-          </div>
-
-          <div className="task-composer__hero-stats">
-            <div className="task-composer__hero-stat">
-              <span>Group</span>
-              <strong>{group?.name || 'No group'}</strong>
-            </div>
-            <div className="task-composer__hero-stat">
-              <span>When</span>
-              <strong>{formData.scheduledDate || getTodayDate()}</strong>
-            </div>
-            <div className="task-composer__hero-stat">
-              <span>Status</span>
-              <strong>{isCompletedTask ? 'Completed' : isEditing ? 'Editing' : 'Draft'}</strong>
-            </div>
-          </div>
-        </section>
-
-        <section className="task-composer__section task-composer__section--core">
-          <div className="task-composer__section-heading">
-            <span className="task-composer__eyebrow">Core</span>
-            <h5>Task identity</h5>
-            <p>Start with a sharp title and optionally pull it from one of the remaining milestones.</p>
-          </div>
-
-          <div className="task-composer__field task-composer__field--title">
-            <div className="task-composer__label-row">
-              <label htmlFor="task-title">Title</label>
-              <small>{formData.title.length}/{TASK_TITLE_MAX_LENGTH}</small>
-            </div>
-
-            <div className="task-composer__title-input-row">
-              <input
-                id="task-title"
-                ref={titleInputRef}
-                name="title"
-                value={formData.title}
-                onChange={handleChange}
-                placeholder="Ex: Finish chapter summary and create flashcards"
-                maxLength={TASK_TITLE_MAX_LENGTH}
-              />
-
-              {incompleteMilestones.length > 0 ? (
-                <button
-                  ref={milestoneButtonRef}
-                  type="button"
-                  className="task-composer__milestone-button"
-                  onClick={() => setShowMilestoneSelector((current) => !current)}
-                  title="Select from milestone"
-                >
-                  <i className="bi bi-list-check" aria-hidden="true" />
-                  <span>Use milestone</span>
-                </button>
-              ) : null}
-
-              <MilestoneDropdown
-                isOpen={showMilestoneSelector}
-                onClose={() => setShowMilestoneSelector(false)}
-                milestones={incompleteMilestones}
-                onSelectMilestone={handleSelectMilestone}
-                triggerElement={milestoneButtonRef.current}
-              />
-            </div>
-          </div>
-        </section>
-
-        <section className="task-composer__section task-composer__section--schedule">
-          <div className="task-composer__section-heading">
-            <span className="task-composer__eyebrow">Schedule</span>
-            <h5>Timing and intensity</h5>
-            <p>Decide when to do it, how long it deserves and how much urgency it carries.</p>
-          </div>
-
-          <div className="task-composer__schedule-grid">
-            <label className="task-composer__field">
-              <span>Date</span>
-              <input
-                type="date"
-                name="scheduledDate"
-                value={formData.scheduledDate}
-                onChange={handleChange}
-              />
-            </label>
-
-            <label className="task-composer__field">
-              <span>Timer</span>
-              <div className="task-composer__timer-input">
+        <div className="task-composer__shell">
+          <div className="task-composer__top-row">
+            <div className="task-composer__identity">
+              <label className="task-composer__title-field" htmlFor="task-title">
+                <i className="bi bi-pencil-square" aria-hidden="true" />
                 <input
-                  type="number"
-                  min="0"
-                  name="timer"
-                  value={formData.timer}
+                  id="task-title"
+                  ref={titleInputRef}
+                  name="title"
+                  value={formData.title}
                   onChange={handleChange}
+                  placeholder="Task title"
+                  maxLength={TASK_TITLE_MAX_LENGTH}
+                  aria-label="Task title"
                 />
-                <small>minutes</small>
-              </div>
-            </label>
+              </label>
 
-            <div className="task-composer__field task-composer__field--priority">
-              <span>Priority</span>
-              <div className="task-composer__priority-group" role="group" aria-label="Task priority">
+              <div className="task-composer__identity-actions">
+                <span className="task-composer__counter">{formData.title.length}/{TASK_TITLE_MAX_LENGTH}</span>
+                {incompleteMilestones.length > 0 ? (
+                  <button
+                    ref={milestoneButtonRef}
+                    type="button"
+                    className="task-composer__milestone-button"
+                    onClick={() => setShowMilestoneSelector((current) => !current)}
+                    aria-label="Use milestone"
+                  >
+                    <i className="bi bi-list-check" aria-hidden="true" />
+                  </button>
+                ) : null}
+                <MilestoneDropdown
+                  isOpen={showMilestoneSelector}
+                  onClose={() => setShowMilestoneSelector(false)}
+                  milestones={incompleteMilestones}
+                  onSelectMilestone={handleSelectMilestone}
+                  triggerElement={milestoneButtonRef.current}
+                />
+              </div>
+            </div>
+
+            <div className="task-composer__priority-strip" role="group" aria-label="Task priority">
+              <div className="task-composer__priority-group">
                 {PRIORITY_OPTIONS.map((option) => (
                   <button
                     key={option.value}
                     type="button"
                     className={`task-composer__priority-pill ${formData.priority === option.value ? 'is-active' : ''}`}
                     onClick={() => handlePriorityChange(option.value)}
+                    aria-label={`${option.label} priority`}
                   >
                     <i className={`bi ${option.icon}`} aria-hidden="true" />
-                    {option.label}
+                    <span>{option.label}</span>
                   </button>
                 ))}
               </div>
             </div>
           </div>
-        </section>
 
-        <section className="task-composer__section task-composer__section--details">
-          <div className="task-composer__section-heading">
-            <span className="task-composer__eyebrow">Details</span>
-            <h5>Execution context</h5>
-            <p>Add the short brief and the note you want visible when the task returns to your attention.</p>
+          <div className="task-composer__planner">
+            <div className="task-composer__date-block">
+              <div className="task-composer__date-inline">
+                <div className="task-composer__date-copy">
+                  <strong>{scheduledDateLabel}</strong>
+                  <span>{scheduledDate}</span>
+                </div>
+                <button
+                  ref={calendarButtonRef}
+                  type="button"
+                  className={`task-composer__date-button icon-button ${isCalendarOpen ? 'is-open' : ''}`.trim()}
+                  onClick={handleToggleCalendar}
+                  aria-expanded={isCalendarOpen}
+                  aria-label="Choose task date"
+                >
+                  <i className="bi bi-calendar3" aria-hidden="true" />
+                </button>
+              </div>
+
+              <TaskCalendarPopover
+                isOpen={isCalendarOpen}
+                onClose={() => setIsCalendarOpen(false)}
+                triggerElement={calendarButtonRef.current}
+                monthKey={calendarMonth}
+                onMonthChange={setCalendarMonth}
+                selectedDate={scheduledDate}
+                onSelectDate={handleSelectCalendarDate}
+                ariaLabel="Task schedule calendar"
+              />
+            </div>
+
+            <div className="task-composer__timer-block" aria-label="Task timer">
+              <div className="task-composer__timer-control">
+                <i className="bi bi-stopwatch" aria-hidden="true" />
+                <button
+                  type="button"
+                  className="task-composer__timer-adjust"
+                  onClick={() => handleAdjustTimer(-TIMER_STEP_MINUTES)}
+                  aria-label={`Remove ${TIMER_STEP_MINUTES} minutes`}
+                >
+                  -
+                </button>
+                <div className="task-composer__timer-fields" aria-label="Task timer">
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    className="task-composer__timer-input"
+                    value={timerHours}
+                    onChange={handleTimerHoursChange}
+                    onBlur={handleTimerFieldBlur}
+                    aria-label="Timer hours"
+                  />
+                  <span className="task-composer__timer-separator">:</span>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    className="task-composer__timer-input"
+                    value={timerMinutes}
+                    onChange={handleTimerMinutesChange}
+                    onBlur={handleTimerFieldBlur}
+                    aria-label="Timer minutes"
+                  />
+                </div>
+                <button
+                  type="button"
+                  className="task-composer__timer-adjust"
+                  onClick={() => handleAdjustTimer(TIMER_STEP_MINUTES)}
+                  aria-label={`Add ${TIMER_STEP_MINUTES} minutes`}
+                >
+                  +
+                </button>
+              </div>
+            </div>
+
           </div>
 
           <div className="task-composer__details-grid">
-            <label className="task-composer__field">
-              <span>Description</span>
+            <label className="task-composer__text-panel" htmlFor="task-desc">
+              <div className="task-composer__text-panel-icon" aria-hidden="true">
+                <i className="bi bi-journal-text" />
+              </div>
               <textarea
+                id="task-desc"
                 name="desc"
                 value={formData.desc}
                 onChange={handleChange}
-                rows="4"
-                placeholder="Describe the concrete outcome of this study block."
+                rows="5"
+                placeholder="Description"
+                aria-label="Task description"
               />
             </label>
 
-            <label className="task-composer__field">
-              <span>Note</span>
+            <label className="task-composer__text-panel" htmlFor="task-note">
+              <div className="task-composer__text-panel-icon" aria-hidden="true">
+                <i className="bi bi-pin-angle" />
+              </div>
               <textarea
+                id="task-note"
                 name="note"
                 value={formData.note}
                 onChange={handleChange}
-                rows="4"
-                placeholder="Add a reminder, cue or study constraint you want visible later."
+                rows="5"
+                placeholder="Note"
+                aria-label="Task note"
               />
             </label>
           </div>
-        </section>
+        </div>
       </div>
 
       <div className="task-composer__footer">
-        <div className="task-composer__footer-copy">
-          <strong>{trimmedTitle ? 'Ready to save' : 'Title required'}</strong>
-          <span>
-            {trimmedTitle
-              ? 'The task now has enough structure to re-enter the workspace clearly.'
-              : 'Start from the title to enable the composer action.'}
-          </span>
-        </div>
-
         <div className="task-composer__footer-actions">
           {onCancel ? (
             <Button type="button" variant="ghost" onClick={onCancel}>
