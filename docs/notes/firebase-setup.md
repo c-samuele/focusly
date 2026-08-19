@@ -1,27 +1,28 @@
-# Firebase Setup
+# Setup Firebase
 
 ## 1. Variabili ambiente
 
 Creare `frontend/.env.local` partendo da `frontend/.env.example` e valorizzare:
 
 ```text
-VITE_FIREBASE_API_KEY=...
-VITE_FIREBASE_AUTH_DOMAIN=focusly-3d54d.firebaseapp.com
-VITE_FIREBASE_PROJECT_ID=focusly-3d54d
-VITE_FIREBASE_STORAGE_BUCKET=focusly-3d54d.firebasestorage.app
-VITE_FIREBASE_MESSAGING_SENDER_ID=933287431763
-VITE_FIREBASE_APP_ID=1:933287431763:web:bbe4af54785acd6dfd00a6
+VITE_FIREBASE_API_KEY=<valore-locale>
+VITE_FIREBASE_AUTH_DOMAIN=<valore-locale>
+VITE_FIREBASE_PROJECT_ID=<valore-locale>
+VITE_FIREBASE_STORAGE_BUCKET=<valore-locale>
+VITE_FIREBASE_MESSAGING_SENDER_ID=<valore-locale>
+VITE_FIREBASE_APP_ID=<valore-locale>
 ```
 
-`apiKey` va recuperata dalla Web App `focusly-web` nel progetto Firebase `focusly`.
+I valori vanno recuperati dalla Firebase Console della Web App associata al progetto.
+`frontend/.env.local` non deve essere versionato.
 
 ## 1.b Web App
 
 Verificare in Firebase Console:
 
 * Project settings -> General -> Your apps
-* esiste la Web App `focusly-web`
-* la config web coincide con i valori sopra
+* esiste una Web App configurata per il progetto
+* la configurazione web coincide con i valori nel file locale `.env.local`
 
 ## 2. Authentication
 
@@ -30,21 +31,20 @@ Verificare in Firebase Console:
 * Authentication -> Sign-in method -> Google -> Enabled
 * Authentication -> Settings -> Authorized domains:
   * `localhost`
-  * `focusly-3d54d.firebaseapp.com`
-  * `focusly-3d54d.web.app`
+  * il dominio Firebase Hosting del progetto, se usato
 
 ## 3. Firestore Database
 
 Verificare:
 
-* database creata in regione `eur3`
+* database creata nella regione scelta per il progetto
 * modalità attuale `Test` da sostituire con le regole del repo prima dell'uso reale
 
 ## 4. Regole Firestore
 
 Regole versionate nel repo:
 
-* [firestore.rules](/Users/macos/Desktop/APP/frontend/firestore.rules:1)
+* [firestore.rules](../../frontend/firestore.rules)
 
 Da pubblicare in uno di questi due modi:
 
@@ -61,7 +61,7 @@ Esempio:
 ```bash
 npm install -g firebase-tools
 firebase login
-firebase use focusly-3d54d
+firebase use <project-id>
 firebase deploy --only firestore:rules,firestore:indexes
 ```
 
@@ -69,7 +69,7 @@ firebase deploy --only firestore:rules,firestore:indexes
 
 File versionato:
 
-* [firestore.indexes.json](/Users/macos/Desktop/APP/frontend/firestore.indexes.json:1)
+* [firestore.indexes.json](../../frontend/firestore.indexes.json)
 
 Strategia adottata: creare indici composti solo on demand quando Firestore lo richiede.
 

@@ -1,4 +1,4 @@
-# FIREBASE_MIGRATION_PLAN.md
+# Piano di migrazione a Firebase
 
 ## Obiettivo
 
@@ -15,24 +15,15 @@ Senza backend dedicato nella V1.
 
 ## Project
 
-* Project Name: focusly
-* Project ID: focusly-3d54d
+* Project Name: configurato localmente
+* Project ID: configurato localmente
 
 ## Web App
 
-* Nome: focusly-web
+* Nome: configurato localmente
 
-## Firebase Config
-
-```text
-authDomain: focusly-3d54d.firebaseapp.com
-projectId: focusly-3d54d
-storageBucket: focusly-3d54d.firebasestorage.app
-messagingSenderId: 933287431763
-appId: 1:933287431763:web:bbe4af54785acd6dfd00a6
-```
-
-Recuperare apiKey dal progetto Firebase.
+La configurazione Firebase risiede esclusivamente in `frontend/.env.local` e non va
+inserita nella documentazione versionata.
 
 ## Authentication
 
@@ -43,8 +34,7 @@ Provider attivo:
 Domini autorizzati:
 
 * localhost
-* focusly-3d54d.firebaseapp.com
-* focusly-3d54d.web.app
+* dominio Firebase Hosting del progetto, se usato
 
 ## Firestore
 

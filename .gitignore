@@ -40,4 +40,6 @@ Icon?
 *.out
 *.synctex.gz
 *.toc
+# Note operative locali che potrebbero contenere dati riservati.
+docs/notes/private/
 # docs/Relazione
