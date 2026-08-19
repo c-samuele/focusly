@@ -46,7 +46,7 @@
 \title{
     \textbf{Progetto di\\ Reti di Calcolatori}\\[1.2cm]
     % \includegraphics[width=0.15\textwidth]{logo.png}\\[0.3cm]
-    {\large \textbf{Focusly}\\[0.5cm] SPA con architettura Client-Server per la pianificazione delle attività}
+    {\large \textbf{Focusly}\\[0.5cm] Progettazione di una SPA client-server per la pianificazione delle attività}
 }
 
 \author{
@@ -64,7 +64,7 @@
 
 \section{Introduzione}
 
-Focusly nasce come progetto orientato alla pianificazione dello studio attraverso una web application in grado di organizzare task, gruppi tematici e milestone all'interno di un'unica interfaccia. L'idea di partenza é offrire uno strumento semplice per l'utente finale, ma progettato secondo criteri moderni, con autenticazione remota, persistenza cloud e possibilità di mantenere una continuità d'uso anche in presenza di dati locali salvati nel browser.
+Focusly nasce come progetto orientato alla pianificazione dello studio attraverso una web application in grado di organizzare task, gruppi tematici e milestone all'interno di un'unica interfaccia. L'idea di partenza é offrire uno strumento semplice per l'utente finale, con autenticazione remota, persistenza cloud e possibilità di mantenere una continuità d'uso anche in presenza di dati locali salvati nel browser.
 
 La scelta di sviluppare e analizzare questo progetto nel contesto di Reti di Calcolatori deriva dall'interesse per le applicazioni web che affidano parte rilevante della loro logica a servizi distribuiti raggiunti tramite rete. In Focusly, infatti, la componente significativa non riguarda soltanto l'interfaccia grafica, ma soprattutto il modo in cui il browser interagisce con servizi cloud esterni per autenticare l'utente, memorizzare il workspace personale e riallineare le informazioni tra sessioni diverse.
 
@@ -72,7 +72,7 @@ La presente relazione ha quindi l'obiettivo di descrivere la specifica del proge
 
 \section{Specifica di Progetto}
 
-\par L'obiettivo del progetto é la realizzazione di un'applicazione web per la pianificazione e gestione di task organizzati in gruppi tematici, con milestone e statistiche di analisi. La specifica si concentra quindi su un sistema che unisca semplicità d'uso, accesso remoto ai dati e una struttura abbastanza modulare da poter evolvere nel tempo.
+\par L'obiettivo del progetto é la realizzazione di un'applicazione web per la pianificazione e gestione di task organizzati in gruppi tematici, con milestone e statistiche di analisi. La specifica si concentra quindi su un sistema che unisca semplicità d'uso, accesso remoto ai dati e una struttura modulare da poter evolvere nel tempo.
 
 \subsection{Requisiti funzionali}
 
@@ -99,7 +99,7 @@ La presente relazione ha quindi l'obiettivo di descrivere la specifica del proge
 
 \subsection{Tecnologie utilizzate}
 
-\par Il progetto combina tecnologie web di base, librerie frontend, protocolli di trasporto e servizi cloud. L'insieme risulta coerente con una Single Page Application, nella quale gran parte della logica applicativa viene eseguita sul client, mentre autenticazione e dati persistenti vengono delegati a servizi remoti specializzati.
+\par Il progetto combina tecnologie web di base, librerie frontend, protocolli di trasporto e servizi cloud. L'insieme risulta coerente con una Single Page Application, nella quale gran parte della logica applicativa viene eseguita sul client, mentre autenticazione e archiviazione vengono delegati a servizi remoti specializzati.
 
 \begin{itemize}
   \item \textbf{HTML5, CSS3 e JavaScript ES Modules}\\ Costituiscono la base della SPA eseguita nel browser, definendo struttura, stile e logica applicativa.
@@ -176,7 +176,7 @@ La presente relazione ha quindi l'obiettivo di descrivere la specifica del proge
 
 \par Il provider Google viene inoltre configurato con lingua italiana e con il parametro \texttt{prompt = select\_account}, in modo da rendere esplicita la scelta dell'account. Il modulo \texttt{authService.js} espone quindi le primitive principali per il login, il logout e l'osservazione dello stato di autenticazione tramite \texttt{onAuthStateChanged()}.
 
-\par L'applicazione non effettua interrogazioni continue verso il server per determinare se l'utente sia autenticato: si affida invece al listener di Firebase Auth, che notifica al frontend ogni cambiamento di sessione. Questa soluzione é interessante sia dal punto di vista tecnico sia da quello didattico, perché mostra come sia possibile delegare la gestione dell'identità a un provider affidabile senza dover sviluppare internamente l'intero ciclo di autenticazione.
+\par L'applicazione non effettua interrogazioni continue verso il server per determinare se l'utente sia autenticato: si affida invece al listener di Firebase Auth, che notifica al frontend ogni cambiamento di sessione. Questa soluzione é interessante poiché mostra come sia possibile delegare la gestione dell'identità a un provider affidabile senza dover sviluppare internamente l'intero ciclo di autenticazione.
 
 \par Nel componente radice \texttt{App.jsx}, una \texttt{useEffect} registra la subscription all'autenticazione. Quando Firebase segnala un utente autenticato, lo store Zustand richiama l'azione \texttt{handleAuthStateChange}, aggiorna o crea il profilo su Firestore, valuta l'eventuale migrazione dei dati locali e infine carica lo stato dell'area di lavoro. In caso di assenza di sessione, l'app mostra invece la schermata di login. La business logic di ingresso e uscita dall'app non é quindi distribuita nei componenti di UI, ma concentrata nello store globale.
 
@@ -244,7 +244,7 @@ users/{uid}/groups/{groupId}/milestones/{milestoneId}
   \item il caricamento dati usa letture esplicite, non listener realtime Firestore;
   \item l'assenza di un backend custom rende più difficile centralizzare la business logic.
   \item alcune operazioni complesse, come la cancellazione coordinata di gruppo e task, rimangono gestite interamente nel client;
-  \item la sincronizzazione multi-dispositivo si basa sul refresh e sulla persistenza in cloud dei dati e non su push continuo verso la UI dal server.
+  \item La sincronizzazione multi-dispositivo si basa sul refresh e sulla persistenza dei dati nel cloud, anziché su un push continuo dal server al client.
 \end{itemize}
 
 \par Focusly rappresenta quindi un esempio di architettura \emph{serverless client-driven}: semplice, efficace per un progetto "in the small", ma meno controllabile di una soluzione con backend applicativo dedicato. Il compromesso é stato scelto consapevole: privilegiare rapidità di sviluppo, chiarezza architetturale e integrazione con servizi gestiti, accettando i limiti di una minore centralizzazione della logica lato server.
@@ -259,7 +259,7 @@ users/{uid}/groups/{groupId}/milestones/{milestoneId}
   \end{itemize}
 
 \par I possibili sviluppi futuri più sensati, riguardano: meccanismi realtime per la sincronizzazione continua e collaborazione tra più utenti, le funzionalità di analisi e il calendario per visualizzare la pianificazione completa su scala più ampia.
-\par In questa prospettiva, Focusly costituisce un prototipo: non un sistema definitivo, ma un progetto coerente e ben impostato, capace di mostrare come le tecnologie cloud moderne possano essere impiegate in modo efficace all'interno di un'applicazione web orientata all'analisi e miglioramento della produttività personale.
+\par In questa prospettiva, Focusly costituisce un prototipo, capace di mostrare come le tecnologie cloud moderne possano essere impiegate in modo efficace all'interno di un'applicazione web orientata all'analisi e miglioramento della produttività personale.
 
 \section{Documentation}
 

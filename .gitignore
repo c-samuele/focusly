@@ -26,6 +26,8 @@ backend/.env.*
 
 # OS / editor files
 .DS_Store
+# File di metadati creato da macOS per le cartelle con icona personalizzata.
+Icon?
 *.swp
 *.swo
 .vscode/
@@ -39,4 +41,3 @@ backend/.env.*
 *.synctex.gz
 *.toc
 # docs/Relazione
-

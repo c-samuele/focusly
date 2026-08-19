@@ -4,13 +4,13 @@
 // cioe inizializzare i client condivisi che il frontend userà per parlare
 // con i servizi Firebase.
 //
-// In questo progetto i servizi realmente usati sono:
+// In questo progetto i servizi usati sono:
 // - Firebase Auth, per login Google e stato sessione
 // - Cloud Firestore, per leggere e scrivere il workspace utente
 //
-// Nota importante:
+// Nota:
 // qui non si vedono chiamate HTTP o WebSocket manuali. Il trasporto reale
-// e gestito internamente dal Firebase Web SDK a partire dagli oggetti creati
+// è gestito internamente dal Firebase Web SDK a partire dagli oggetti creati
 // in questo modulo (`auth` e `db`).
 import { initializeApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider } from 'firebase/auth';
@@ -43,7 +43,7 @@ const firebaseConfig = {
 };
 
 // Istanza principale dell'app Firebase.
-// Tutti gli altri client vengono creati a partire da qui.
+// I client SDK dei singoli servizi Firebase vengono creati a partire da questa istanza.
 const firebaseApp = initializeApp(firebaseConfig);
 
 // Client Auth condiviso da tutto il frontend.
@@ -54,8 +54,7 @@ const auth = getAuth(firebaseApp);
 // Viene usato da firestoreService per tutte le operazioni CRUD remote.
 const db = getFirestore(firebaseApp);
 
-// Provider Google per il login popup.
-// E incapsulato qui per mantenere centralizzata la configurazione auth.
+// Provider Google per il login.
 const googleProvider = new GoogleAuthProvider();
 
 // Forza l'interfaccia auth in italiano dove supportato da Firebase.
@@ -67,9 +66,9 @@ googleProvider.setCustomParameters({
   prompt: 'select_account',
 });
 
-// Esportiamo solo le istanze condivise:
-// - `firebaseApp` se in futuro serviranno altri servizi Firebase
-// - `auth` per autenticazione
-// - `db` per Firestore
-// - `googleProvider` per il flusso popup Google
+// Esportiamo le istanze condivise:
+// - `firebaseApp`: istanza principale dell'app Firebase
+// - `auth`: client Firebase Authentication
+// - `db`: client Cloud Firestore
+// - `googleProvider`: provider Google per il login popup
 export { auth, db, firebaseApp, googleProvider };

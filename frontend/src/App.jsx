@@ -1,10 +1,10 @@
 // Componente radice dell'applicazione.
 // Gestisce bootstrap auth + dati prima di mostrare la dashboard.
 //
-// Questo e il primo anello applicativo del collegamento con Firebase:
+// Questo è il primo blocco applicativo del collegamento con Firebase:
 // - applica il tema iniziale
 // - si sottoscrive allo stato Auth tramite `authService`
-// - decide quale shell mostrare in base allo stato auth/dati
+// - decide quale schermata mostrare in base allo stato auth/dati
 //
 // Non fa query Firestore in proprio, ma apre il flusso che porta lo store
 // a farle quando arriva un utente autenticato.
@@ -27,10 +27,9 @@ function App() {
   const signInWithGoogle = useAppStore((state) => state.signInWithGoogle);
 
   useEffect(() => {
-    // Manteniamo tema e meta colore coerenti gia dal bootstrap iniziale,
-    // anche prima che la dashboard sia pronta.
+    // Manteniamo tema coerente già dal bootstrap iniziale,
     applyThemeToDocument(getInitialTheme());
-  }, []);
+  }, []); // Elenco dipendenze vuoto: eseguito solo al primo render.
 
   useEffect(() => {
     // Subscription alla sessione Firebase Auth.

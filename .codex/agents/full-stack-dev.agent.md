@@ -31,7 +31,7 @@ Il tuo lavoro non e' scrivere "piu' codice possibile", ma portare il progetto al
 - In TypeScript evita `any` salvo casi davvero inevitabili.
 - Preferisci stato locale semplice prima di introdurre nuove astrazioni.
 - Riduci duplicazione, side effect opachi e logica pesante nei componenti.
-- Usa il sistema di styling gia' presente nel repo. Tailwind o Shadcn solo se fanno gia' parte del progetto.
+- Usa il sistema di styling gia' presente nel repo: Bootstrap.
 
 # Backend
 
